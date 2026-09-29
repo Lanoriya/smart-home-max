@@ -1,0 +1,374 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum IncidentCategory {
+  water
+  electricity
+  heating
+  elevator
+  leak
+  cleaning
+  other
+}
+
+enum IncidentStatus {
+  new
+  acknowledged
+  in_progress
+  resolved
+  rejected
+}
+
+enum IncidentPriority {
+  low
+  normal
+  high
+  emergency
+}
+
+enum AdminRole {
+  dispatcher
+  supervisor
+}
+
+enum OutboxStatus {
+  pending
+  processing
+  delivered
+  dead
+}
+
+enum PhoneVisibility {
+  hidden
+  vehicle_lookup
+}
+
+model User {
+  id            String                 @id @default(uuid()) @db.Uuid
+  maxUserId     String                 @unique @map("max_user_id")
+  displayName   String?                @map("display_name")
+  createdAt     DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt     DateTime?              @map("deleted_at") @db.Timestamptz(3)
+  memberships   ResidentMembership[]
+  reports       Report[]
+  subscriptions IncidentSubscription[]
+  session       BotSession?
+  events        IncidentEvent[]
+  profile       ResidentProfile?
+  vehicles      Vehicle[]
+  incidentPhotos IncidentPhoto[]
+  incidentComments IncidentComment[]
+  apartmentLeaves ApartmentLeave[]
+
+  @@map("users")
+}
+
+model ApartmentLeave {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("apartment_leaves")
+}
+
+model Building {
+  id             String      @id @default(uuid()) @db.Uuid
+  address        String
+  entrancesCount Int         @default(3) @map("entrances_count")
+  apartmentsCount Int        @default(100) @map("apartments_count")
+  chatLink        String?    @map("chat_link")
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  apartments     Apartment[]
+  incidents      Incident[]
+
+  @@map("buildings")
+}
+
+model EmergencyService {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  phone       String
+  description String
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@map("emergency_services")
+}
+
+model UkAccessCode {
+  id        String   @id @default("main")
+  code      String
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("uk_access_codes")
+}
+
+model Apartment {
+  id             String                 @id @default(uuid()) @db.Uuid
+  buildingId     String                 @map("building_id") @db.Uuid
+  number         String
+  inviteCodeHash String?                @map("invite_code_hash")
+  building       Building               @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  memberships    ResidentMembership[]
+  reports        Report[]
+  profile        ResidentProfile?
+  vehicles       Vehicle[]
+  incidentComments IncidentComment[]
+
+  @@unique([buildingId, number])
+  @@map("apartments")
+}
+
+model ResidentMembership {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  apartmentId String    @map("apartment_id") @db.Uuid
+  verifiedAt  DateTime  @default(now()) @map("verified_at") @db.Timestamptz(3)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(3)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  apartment   Apartment @relation(fields: [apartmentId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, apartmentId])
+  @@map("resident_memberships")
+}
+
+model Admin {
+  id           String          @id @default(uuid()) @db.Uuid
+  username     String          @unique
+  passwordHash String          @map("password_hash")
+  role         AdminRole       @default(dispatcher)
+  createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  incidents    Incident[]
+  events       IncidentEvent[]
+  sessions     AdminSession[]
+  auditEvents  AdminAuditEvent[]
+
+  @@map("admins")
+}
+
+model AdminAuditEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  adminId    String   @map("admin_id") @db.Uuid
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  payload    Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  admin      Admin    @relation(fields: [adminId], references: [id], onDelete: Restrict)
+
+  @@index([adminId, createdAt])
+  @@index([entityType, entityId])
+  @@map("admin_audit_events")
+}
+
+model AdminSession {
+  id        String   @id @default(uuid()) @db.Uuid
+  adminId   String   @map("admin_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  admin     Admin    @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("admin_sessions")
+}
+
+model Incident {
+  id              String                 @id @default(uuid()) @db.Uuid
+  buildingId      String                 @map("building_id") @db.Uuid
+  category        IncidentCategory
+  locationZone    String                 @map("location_zone")
+  entranceNumber  Int?                   @map("entrance_number")
+  apartmentNumber String?                @map("apartment_number")
+  title           String
+  status          IncidentStatus         @default(new)
+  priority        IncidentPriority       @default(normal)
+  assigneeAdminId String?                @map("assignee_admin_id") @db.Uuid
+  dueAt           DateTime?              @map("due_at") @db.Timestamptz(3)
+  delayReason     String?                @map("delay_reason")
+  rejectionReason String?                @map("rejection_reason")
+  archivedAt      DateTime?              @map("archived_at") @db.Timestamptz(3)
+  resolvedAt      DateTime?              @map("resolved_at") @db.Timestamptz(3)
+  version         Int                    @default(1)
+  createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  building        Building               @relation(fields: [buildingId], references: [id], onDelete: Restrict)
+  assignee        Admin?                 @relation(fields: [assigneeAdminId], references: [id], onDelete: SetNull)
+  reports         Report[]
+  subscriptions   IncidentSubscription[]
+  events          IncidentEvent[]
+  outboxMessages  OutboxMessage[]
+  photos          IncidentPhoto[]
+  comments        IncidentComment[]
+
+  @@index([buildingId, status, updatedAt(sort: Desc)])
+  @@index([buildingId, category, locationZone, status])
+  @@map("incidents")
+}
+
+model IncidentComment {
+  id           String   @id @default(uuid()) @db.Uuid
+  incidentId   String   @map("incident_id") @db.Uuid
+  authorUserId String   @map("author_user_id") @db.Uuid
+  apartmentId  String?  @map("apartment_id") @db.Uuid
+  text         String
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  incident     Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  author       User     @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+  apartment    Apartment? @relation(fields: [apartmentId], references: [id], onDelete: SetNull)
+
+  @@index([incidentId, createdAt])
+  @@index([apartmentId])
+  @@map("incident_comments")
+}
+
+model Report {
+  id           String    @id @default(uuid()) @db.Uuid
+  incidentId   String    @map("incident_id") @db.Uuid
+  authorUserId String    @map("author_user_id") @db.Uuid
+  apartmentId  String?   @map("apartment_id") @db.Uuid
+  description  String
+  attachmentId String?   @map("max_attachment_id")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  incident     Incident  @relation(fields: [incidentId], references: [id], onDelete: Restrict)
+  author       User      @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+  apartment    Apartment? @relation(fields: [apartmentId], references: [id], onDelete: SetNull)
+
+  @@unique([incidentId, authorUserId])
+  @@map("reports")
+}
+
+model IncidentSubscription {
+  incidentId String   @map("incident_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Restrict)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@id([incidentId, userId])
+  @@map("incident_subscriptions")
+}
+
+model ResidentProfile {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String?  @unique @map("user_id") @db.Uuid
+  apartmentId    String?  @unique @map("apartment_id") @db.Uuid
+  residentsCount Int?     @map("residents_count")
+  phones         String[] @default([]) @map("phones")
+  phoneVisibility PhoneVisibility @default(hidden) @map("phone_visibility")
+  phoneConsentAt  DateTime? @map("phone_consent_at") @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  apartment      Apartment? @relation(fields: [apartmentId], references: [id], onDelete: Cascade)
+  people         ResidentPerson[]
+
+  @@map("resident_profiles")
+}
+
+model Vehicle {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  apartmentId  String?  @map("apartment_id") @db.Uuid
+  licensePlate String   @unique @map("license_plate")
+  ownerPersonId String? @map("owner_person_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apartment    Apartment? @relation(fields: [apartmentId], references: [id], onDelete: Cascade)
+  owner        ResidentPerson? @relation(fields: [ownerPersonId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([apartmentId])
+  @@map("vehicles")
+}
+
+model ResidentPerson {
+  id        String   @id @default(uuid()) @db.Uuid
+  profileId String   @map("profile_id") @db.Uuid
+  fullName  String   @map("full_name")
+  phones    String[] @default([]) @map("phones")
+  isVehicleOwner Boolean @default(false) @map("is_vehicle_owner")
+  profile   ResidentProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  vehicles  Vehicle[]
+
+  @@index([profileId])
+  @@map("resident_people")
+}
+
+model IncidentPhoto {
+  id           String   @id @default(uuid()) @db.Uuid
+  incidentId   String   @map("incident_id") @db.Uuid
+  authorUserId String   @map("author_user_id") @db.Uuid
+  token        String   @map("max_token")
+  url          String?  @map("max_url")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  incident     Incident @relation(fields: [incidentId], references: [id], onDelete: Restrict)
+  author       User     @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@index([incidentId, createdAt])
+  @@index([authorUserId, incidentId])
+  @@map("incident_photos")
+}
+
+model IncidentEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  incidentId   String   @map("incident_id") @db.Uuid
+  type         String
+  actorUserId  String?  @map("actor_user_id") @db.Uuid
+  actorAdminId String?  @map("actor_admin_id") @db.Uuid
+  payload      Json
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  incident     Incident @relation(fields: [incidentId], references: [id], onDelete: Restrict)
+  actorUser    User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorAdmin   Admin?   @relation(fields: [actorAdminId], references: [id], onDelete: SetNull)
+
+  @@index([incidentId, createdAt])
+  @@map("incident_events")
+}
+
+model BotSession {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  step      String
+  data      Json
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("bot_sessions")
+}
+
+model ProcessedUpdate {
+  id          String   @id
+  updateType  String   @map("update_type")
+  processedAt DateTime @default(now()) @map("processed_at") @db.Timestamptz(3)
+
+  @@map("processed_updates")
+}
+
+model OutboxMessage {
+  id            String       @id @default(uuid()) @db.Uuid
+  incidentId    String?      @map("incident_id") @db.Uuid
+  type          String
+  payload       Json
+  status        OutboxStatus @default(pending)
+  attempts      Int          @default(0)
+  nextAttemptAt DateTime     @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lastError     String?      @map("last_error")
+  deliveredAt   DateTime?    @map("delivered_at") @db.Timestamptz(3)
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  incident      Incident?    @relation(fields: [incidentId], references: [id], onDelete: Restrict)
+
+  @@index([status, nextAttemptAt])
+  @@map("outbox_messages")
+}

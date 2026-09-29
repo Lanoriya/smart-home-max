@@ -1,0 +1,189 @@
+openapi: 3.1.0
+info:
+  title: Дом в порядке API
+  version: 0.1.0
+  description: Собственный API MVP. Все маршруты `/api/*`, кроме health, требуют cookie-сессию диспетчера.
+servers:
+  - url: https://jorwey.ru
+    description: Production
+paths:
+  /webhooks/max:
+    post:
+      summary: Приём события MAX Bot API
+      description: Требует заголовок `X-Max-Bot-Api-Secret`; повторное событие безопасно игнорируется.
+      parameters:
+        - name: X-Max-Bot-Api-Secret
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object } } }
+      responses:
+        '200': { description: Событие принято или уже было обработано }
+        '400': { description: Неверный формат события }
+        '401': { description: Неверный webhook secret }
+  /health/live:
+    get:
+      summary: Проверка процесса
+      responses:
+        '200':
+          description: Процесс работает
+          content: { application/json: { schema: { $ref: '#/components/schemas/Health' } } }
+  /health/ready:
+    get:
+      summary: Проверка готовности и БД
+      responses: { '200': { description: Готово }, '503': { description: БД недоступна } }
+  /api/admin/session:
+    get:
+      security: [{ cookieAuth: [] }]
+      summary: Текущая сессия диспетчера
+      responses: { '200': { description: Сессия }, '401': { $ref: '#/components/responses/Unauthorized' } }
+    post:
+      summary: Вход диспетчера
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LoginRequest' } } } }
+      responses: { '200': { description: Сессия создана, headers: { Set-Cookie: { schema: { type: string } } } }, '401': { $ref: '#/components/responses/Unauthorized' }, '429': { description: Временная блокировка входа } }
+    delete:
+      security: [{ cookieAuth: [] }]
+      summary: Выход
+      responses: { '204': { description: Сессия удалена } }
+  /api/incidents:
+    get:
+      security: [{ cookieAuth: [] }]
+      summary: Очередь или архив инцидентов
+      parameters:
+        - { name: archive, in: query, schema: { type: boolean } }
+        - name: sort
+          in: query
+          description: Порядок очереди по дате создания или числу подключившихся жителей.
+          schema: { type: string, enum: [importance_desc, importance_asc, date_desc, date_asc], default: importance_desc }
+      responses: { '200': { description: Список, content: { application/json: { schema: { $ref: '#/components/schemas/IncidentList' } } } }, '401': { $ref: '#/components/responses/Unauthorized' } }
+  /api/incidents/{id}:
+    get:
+      security: [{ cookieAuth: [] }]
+      summary: Карточка инцидента
+      parameters: [{ $ref: '#/components/parameters/IncidentId' }]
+      responses: { '200': { description: Карточка }, '404': { $ref: '#/components/responses/NotFound' } }
+    patch:
+      security: [{ cookieAuth: [] }]
+      summary: Смена статуса, срока или комментария
+      parameters: [{ $ref: '#/components/parameters/IncidentId' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/IncidentPatch' } } } }
+      responses: { '200': { description: Инцидент изменён }, '400': { description: Ошибка DTO }, '409': { description: Конфликт версии или статуса } }
+  /api/incidents/{id}/comments/{commentId}:
+    delete:
+      security: [{ cookieAuth: [] }]
+      summary: Удалить комментарий жителя
+      parameters:
+        - { $ref: '#/components/parameters/IncidentId' }
+        - { name: commentId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses: { '204': { description: Комментарий удалён }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/buildings:
+    get: { security: [{ cookieAuth: [] }], summary: Список домов, responses: { '200': { description: Список домов } } }
+    post:
+      security: [{ cookieAuth: [] }]
+      summary: Добавить дом и квартиры
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BuildingInput' } } } }
+      responses: { '201': { description: Дом создан }, '400': { description: Ошибка DTO } }
+  /api/buildings/{id}:
+    patch:
+      security: [{ cookieAuth: [] }]
+      summary: Изменить дом
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BuildingInput' } } } }
+      responses: { '200': { description: Дом изменён }, '404': { $ref: '#/components/responses/NotFound' } }
+    delete:
+      security: [{ cookieAuth: [] }]
+      summary: Удалить дом и связанные демонстрационные/операционные данные
+      description: Требуется роль supervisor. Привязки жителей удаляются, поэтому им потребуется повторная регистрация.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: Дом удалён
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revokedMemberships]
+                properties: { revokedMemberships: { type: integer, minimum: 0 } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/apartments:
+    get:
+      security: [{ cookieAuth: [] }]
+      summary: Поиск квартир и жителей
+      parameters:
+        - { name: buildingId, in: query, schema: { type: string, format: uuid } }
+        - { name: query, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: sort, in: query, schema: { type: string, enum: [apartment, resident] } }
+        - { name: withResidents, in: query, schema: { type: boolean } }
+      responses: { '200': { description: Список квартир; plaintext индивидуальных кодов не возвращается } }
+  /api/apartments/{id}:
+    patch:
+      security: [{ cookieAuth: [] }]
+      summary: Изменить квартиру, жителей, автомобили и индивидуальный код
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApartmentPatch' } } } }
+      responses: { '200': { description: Данные сохранены }, '409': { description: Дубликат номера или автомобиля } }
+    delete:
+      security: [{ cookieAuth: [] }]
+      summary: Удалить квартиру, профиль, автомобили и привязки
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '204': { description: Удалено }, '404': { $ref: '#/components/responses/NotFound' } }
+  /api/announcements:
+    post:
+      security: [{ cookieAuth: [] }]
+      summary: Поставить объявление в очередь MAX
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Announcement' } } } }
+      responses: { '202': { description: Рассылка поставлена в очередь }, '404': { description: Получатели не найдены } }
+  /api/announcements/apartments:
+    get:
+      security: [{ cookieAuth: [] }]
+      summary: Квартиры для адресной рассылки
+      responses: { '200': { description: Список квартир с активными жителями } }
+  /api/emergency-services:
+    get: { security: [{ cookieAuth: [] }], summary: Справочник служб, responses: { '200': { description: Список } } }
+    post: { security: [{ cookieAuth: [] }], summary: Добавить контакт, responses: { '201': { description: Контакт создан } } }
+  /api/emergency-services/{id}:
+    patch:
+      security: [{ cookieAuth: [] }]
+      summary: Изменить контакт службы
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Контакт сохранён }, '400': { description: Ошибка DTO } }
+    delete:
+      security: [{ cookieAuth: [] }]
+      summary: Удалить контакт службы
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '204': { description: Контакт удалён } }
+  /api/settings/uk-code:
+    get:
+      security: [{ cookieAuth: [] }]
+      summary: Маскированный код УК или раскрытие по ?reveal=true
+      description: Раскрытие полного кода требует роли supervisor и записывается в аудит.
+      parameters: [{ name: reveal, in: query, schema: { type: boolean, default: false } }]
+      responses: { '200': { description: no-store ответ с кодом или маской }, '403': { $ref: '#/components/responses/Forbidden' } }
+    patch:
+      security: [{ cookieAuth: [] }]
+      summary: Сменить общий десятизначный код УК
+      description: Требуется роль supervisor. Операция записывается в административный аудит.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string, pattern: '^\\d{10}$' } } } } } }
+      responses: { '200': { description: Код обновлён }, '400': { description: Неверный формат }, '403': { $ref: '#/components/responses/Forbidden' } }
+components:
+  securitySchemes:
+    cookieAuth: { type: apiKey, in: cookie, name: smart_home_admin }
+  parameters:
+    IncidentId: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+  responses:
+    Unauthorized: { description: Требуется сессия, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Forbidden: { description: Недостаточно прав, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NotFound: { description: Не найдено, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  schemas:
+    Health: { type: object, required: [status], properties: { status: { type: string, const: ok } } }
+    Error: { type: object, required: [code], properties: { code: { type: string }, requestId: { type: string } } }
+    LoginRequest: { type: object, required: [username, password], properties: { username: { type: string }, password: { type: string, minLength: 8 } } }
+    IncidentList: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Incident' } } } }
+    Incident: { type: object, required: [id, title, status, version], properties: { id: { type: string, format: uuid }, title: { type: string }, status: { type: string, enum: [new, acknowledged, in_progress, resolved, rejected] }, version: { type: integer, minimum: 1 } } }
+    IncidentPatch: { type: object, required: [version, dueAt], properties: { version: { type: integer, minimum: 1 }, status: { type: string, enum: [new, acknowledged, in_progress, resolved, rejected] }, dueAt: { type: [string, 'null'], format: date-time }, publicComment: { type: string, minLength: 3, maxLength: 1000 } } }
+    BuildingInput: { type: object, required: [address, apartmentsCount, entrancesCount], properties: { address: { type: string }, apartmentsCount: { type: integer, minimum: 1, maximum: 2000 }, entrancesCount: { type: integer, minimum: 1, maximum: 50 }, chatLink: { type: [string, 'null'], format: uri } } }
+    ApartmentPatch: { type: object, required: [number, residentsCount, people, vehicles], properties: { number: { type: string }, residentsCount: { type: [integer, 'null'] }, inviteCode: { type: [string, 'null'], description: При передаче сохраняется только хеш }, people: { type: array }, vehicles: { type: array } } }
+    Announcement: { type: object, required: [audience, text], properties: { audience: { type: string, enum: [all, apartment] }, apartmentId: { type: string, format: uuid }, text: { type: string, minLength: 3, maxLength: 2000 } } }

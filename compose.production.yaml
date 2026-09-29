@@ -1,0 +1,57 @@
+services:
+  db:
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+
+  migrate:
+    environment: &production-backend-environment
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:?Set POSTGRES_USER}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:?Set POSTGRES_DB}?schema=public
+      MAX_MODE: api
+      MAX_RECEIVE_MODE: webhook
+      MAX_API_BASE_URL: ${MAX_API_BASE_URL:-https://platform-api2.max.ru}
+      MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:?Set MAX_BOT_TOKEN}
+      MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET:?Set MAX_WEBHOOK_SECRET}
+      MAX_PUBLIC_WEBHOOK_URL: https://${APP_DOMAIN:?Set APP_DOMAIN}/webhooks/max
+      APARTMENT_CODE_PEPPER: ${APARTMENT_CODE_PEPPER:?Set APARTMENT_CODE_PEPPER}
+      RESIDENT_UK_CODE: ${RESIDENT_UK_CODE:?Set RESIDENT_UK_CODE}
+      ADMIN_SEED_USERNAME: ${ADMIN_SEED_USERNAME:?Set ADMIN_SEED_USERNAME}
+      ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:?Set ADMIN_SEED_PASSWORD}
+      ADMIN_SESSION_TTL_HOURS: ${ADMIN_SESSION_TTL_HOURS:-12}
+      ADMIN_COOKIE_SECURE: "true"
+      ADMIN_WEB_ORIGIN: https://${APP_DOMAIN:?Set APP_DOMAIN}
+      TRUST_PROXY_HOPS: "2"
+
+  bootstrap-admin:
+    environment: *production-backend-environment
+
+  backend:
+    environment:
+      <<: *production-backend-environment
+      PORT: 3000
+
+  worker:
+    environment: *production-backend-environment
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      admin-web:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

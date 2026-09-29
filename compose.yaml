@@ -1,0 +1,110 @@
+name: smart-home-max
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-backend-build: &backend-build
+  context: .
+  dockerfile: apps/backend/Dockerfile
+
+services:
+  db:
+    image: postgres:16.15-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-smart_home}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    logging: *default-logging
+
+  migrate:
+    image: smart-home-max-backend
+    build: *backend-build
+    command: ["apps/backend/node_modules/.bin/prisma", "migrate", "deploy", "--schema", "apps/backend/prisma/schema.prisma"]
+    environment: &backend-environment
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-smart_home}?schema=public
+      MAX_MODE: ${MAX_MODE:-fake}
+      MAX_RECEIVE_MODE: ${MAX_RECEIVE_MODE:-none}
+      MAX_API_BASE_URL: ${MAX_API_BASE_URL:-https://platform-api2.max.ru}
+      MAX_BOT_TOKEN: ${MAX_BOT_TOKEN:-}
+      MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET:-change-me-webhook-secret}
+      MAX_PUBLIC_WEBHOOK_URL: ${MAX_PUBLIC_WEBHOOK_URL:-}
+      APARTMENT_CODE_PEPPER: ${APARTMENT_CODE_PEPPER:-change-me-apartment-code-pepper}
+      ADMIN_SEED_USERNAME: ${ADMIN_SEED_USERNAME:-dispatcher}
+      ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:-change-this-demo-password}
+      ADMIN_SESSION_TTL_HOURS: ${ADMIN_SESSION_TTL_HOURS:-12}
+      ADMIN_COOKIE_SECURE: ${ADMIN_COOKIE_SECURE:-false}
+      ADMIN_WEB_ORIGIN: ${ADMIN_WEB_ORIGIN:-http://localhost:8080}
+      RESIDENT_UK_CODE: ${RESIDENT_UK_CODE:-0000000000}
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    logging: *default-logging
+
+  bootstrap-admin:
+    image: smart-home-max-backend
+    build: *backend-build
+    command: ["node", "apps/backend/dist/bootstrap-admin.js"]
+    environment: *backend-environment
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+    logging: *default-logging
+
+  backend:
+    image: smart-home-max-backend
+    build: *backend-build
+    command: ["node", "apps/backend/dist/server.js"]
+    environment:
+      <<: *backend-environment
+      PORT: 3000
+    depends_on:
+      bootstrap-admin:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    logging: *default-logging
+
+  worker:
+    image: smart-home-max-backend
+    build: *backend-build
+    command: ["node", "apps/backend/dist/worker.js"]
+    environment: *backend-environment
+    depends_on:
+      bootstrap-admin:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    logging: *default-logging
+
+  admin-web:
+    build:
+      context: .
+      dockerfile: apps/admin-web/Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+    logging: *default-logging
+
+volumes:
+  postgres_data:

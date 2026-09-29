@@ -1,0 +1,22 @@
+{
+  "name": "smart-home-max",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --parallel --filter @smart-home/backend --filter @smart-home/admin-web dev",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @smart-home/backend db:generate",
+    "db:migrate": "pnpm --filter @smart-home/backend db:migrate",
+    "db:seed": "pnpm --filter @smart-home/backend db:seed",
+    "max:check": "pnpm --filter @smart-home/backend max:check",
+    "max:subscribe": "pnpm --filter @smart-home/backend max:subscribe",
+    "smoke:production": "node scripts/smoke-production.mjs"
+  }
+}

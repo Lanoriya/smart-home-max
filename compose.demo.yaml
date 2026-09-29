@@ -1,0 +1,29 @@
+services:
+  seed:
+    image: smart-home-max-backend
+    command: ["apps/backend/node_modules/.bin/tsx", "apps/backend/prisma/seed.ts"]
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-smart_home}?schema=public
+      RESIDENT_UK_CODE: ${RESIDENT_UK_CODE:-0000000000}
+      MAX_MODE: fake
+      MAX_RECEIVE_MODE: none
+      MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET:-change-me-webhook-secret}
+      APARTMENT_CODE_PEPPER: ${APARTMENT_CODE_PEPPER:-change-me-apartment-code-pepper}
+      ADMIN_SEED_USERNAME: ${ADMIN_SEED_USERNAME:-dispatcher}
+      ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:-change-this-demo-password}
+      ADMIN_COOKIE_SECURE: "false"
+    depends_on:
+      bootstrap-admin:
+        condition: service_completed_successfully
+    restart: "no"
+
+  backend:
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+  worker:
+    depends_on:
+      seed:
+        condition: service_completed_successfully

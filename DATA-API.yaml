@@ -1,0 +1,30 @@
+# Verify schemaVersion against the DATA-API specification issued by the organisers.
+schemaVersion: '1.0'
+solution: 'Дом в порядке'
+baseUrl: 'https://jorwey.ru'
+checks:
+  - name: 'Health check'
+    method: GET
+    path: /health/live
+    role: public
+    expectedStatusCodes: [200]
+    expectedContentType: application/json
+    requiredResponseFields: [status]
+  - name: 'Dispatcher login'
+    method: POST
+    path: /api/admin/session
+    role: dispatcher
+    request:
+      contentType: application/json
+      body: { username: '${TEST_DISPATCHER_USERNAME}', password: '${TEST_DISPATCHER_PASSWORD}' }
+    expectedStatusCodes: [200]
+    expectedContentType: application/json
+    requiredResponseFields: [admin]
+  - name: 'Incident queue'
+    method: GET
+    path: /api/incidents
+    role: dispatcher
+    request: { cookieFrom: 'Dispatcher login' }
+    expectedStatusCodes: [200]
+    expectedContentType: application/json
+    requiredResponseFields: [items]
