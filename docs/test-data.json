@@ -1,0 +1,97 @@
+{
+  "formatVersion": "1.0",
+  "title": "Демонстрационные данные MVP «Дом в порядке»",
+  "scope": "local-demo-only",
+  "setup": {
+    "command": "docker compose -f compose.yaml -f compose.demo.yaml up --build",
+    "resetCommand": "docker compose -f compose.yaml -f compose.demo.yaml down -v",
+    "generator": "apps/backend/prisma/seed.ts",
+    "mode": "MAX_MODE=fake",
+    "dispatcher": {
+      "username": "dispatcher",
+      "password": "change-this-demo-password"
+    },
+    "residentUkCode": "0000000000"
+  },
+  "expectedCounts": {
+    "buildings": 2,
+    "apartments": 180,
+    "residents": 450,
+    "vehicles": 178,
+    "incidents": 7,
+    "emergencyServices": 5
+  },
+  "buildings": [
+    {
+      "id": "d1000000-0000-4000-8000-000000000001",
+      "address": "Тестовый №1 Улица демонстрации 10",
+      "entrancesCount": 3,
+      "apartmentsCount": 100,
+      "apartmentNumbers": "1..100"
+    },
+    {
+      "id": "d1100000-0000-4000-8000-000000000002",
+      "address": "Тестовый №2 Улица демонстрации 13",
+      "entrancesCount": 4,
+      "apartmentsCount": 80,
+      "apartmentNumbers": "1..80"
+    }
+  ],
+  "residentsAndVehicles": {
+    "residentsPerApartment": { "min": 1, "max": 4 },
+    "vehiclesPerApartment": { "min": 0, "max": 2 },
+    "phonePattern": "+7900<дом><номерКвартиры:5><номерЖителя>",
+    "allNamesPhonesPlates": "synthetic-demo-data"
+  },
+  "incidents": [
+    {
+      "id": "d5000001-0000-4000-8000-000000000001",
+      "title": "Слабый напор холодной воды в подъезде 1",
+      "status": "in_progress",
+      "reportsCount": 3,
+      "commentsCount": 2,
+      "apiStatusUpdateFixture": { "version": 1, "targetStatus": "acknowledged" }
+    },
+    {
+      "id": "d5000002-0000-4000-8000-000000000002",
+      "title": "Лифт останавливается между этажами",
+      "status": "new",
+      "reportsCount": 2,
+      "commentsCount": 1
+    },
+    {
+      "id": "d5000003-0000-4000-8000-000000000003",
+      "title": "Не убран подъезд после выходных",
+      "status": "acknowledged",
+      "reportsCount": 1,
+      "commentsCount": 1
+    },
+    {
+      "id": "d5000004-0000-4000-8000-000000000004",
+      "title": "Протечка под кухонной мойкой",
+      "status": "new",
+      "reportsCount": 1,
+      "commentsCount": 0
+    },
+    {
+      "id": "d5000005-0000-4000-8000-000000000005",
+      "title": "Не работает освещение на лестнице",
+      "status": "in_progress",
+      "reportsCount": 3,
+      "commentsCount": 1
+    },
+    {
+      "id": "d5000006-0000-4000-8000-000000000006",
+      "title": "В первом подъезде прохладные батареи",
+      "status": "resolved",
+      "archived": true
+    },
+    {
+      "id": "d5000007-0000-4000-8000-000000000007",
+      "title": "Повреждена скамейка во дворе",
+      "status": "rejected",
+      "archived": true
+    }
+  ],
+  "emergencyServices": "5 synthetic services with +7 (900) 000-00-01..05"
+}

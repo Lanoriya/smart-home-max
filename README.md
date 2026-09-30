@@ -18,7 +18,7 @@ Seed для локальной демонстрации добавляет то�
 - PostgreSQL — данные домов, заявок, жителей и очереди;
 - MAX Bot API — получение событий и доставка сообщений.
 
-Схема связей и решения описаны в [ARCHITECTURE.md](ARCHITECTURE.md). Контракт API: [openapi.yaml](docs/openapi.yaml). Обязательные проверки API: [DATA-API.yaml](DATA-API.yaml). Инструкции для VDS, эксплуатация и проверка находятся в [DEPLOY_VDS.md](docs/DEPLOY_VDS.md), [OPERATIONS.md](docs/OPERATIONS.md) и [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md). Для передачи на оценку используйте пошаговую [памятку организаторам](docs/ORGANIZER_HANDOFF.md).
+Схема связей и решения описаны в [ARCHITECTURE.md](ARCHITECTURE.md). Контракт API: [openapi.yaml](docs/openapi.yaml). Обязательные проверки API: [DATA-API.yaml](DATA-API.yaml). Формальное описание демонстрационного набора: [test-data.json](docs/test-data.json). Инструкции для VDS, эксплуатация и проверка находятся в [DEPLOY_VDS.md](docs/DEPLOY_VDS.md), [OPERATIONS.md](docs/OPERATIONS.md) и [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md). Для передачи на оценку используйте пошаговую [памятку организаторам](docs/ORGANIZER_HANDOFF.md).
 
 ## Локальный запуск
 
@@ -85,3 +85,19 @@ Production-конфигурация подготовлена в `compose.product
 - нет интеграций с ГИС ЖКХ, поставщиками коммунальных услуг и официальными реестрами;
 - списки в текущем интерфейсе ограничены 100 инцидентами/квартирами и 10 личными заявками/комментариями, полноценной пагинации пока нет;
 - версия схемы `DATA-API.yaml` должна быть сверена с актуальным пакетом организаторов перед сдачей.
+
+## Чек-лист воспроизводимой проверки
+
+Этот раздел явно покрывает технические пункты регламента.
+
+- **Работающее решение в MAX.** Рабочий бот: `https://max.ru/t238_hakaton_max_bot`. Для локальной проверки MAX заменяется безопасным режимом `MAX_MODE=fake`; реальный токен не нужен и не передаётся в репозитории.
+- **Зафиксированная версия исходников.** Используйте Git-репозиторий и commit hash, указанные на первом техническом слайде; альтернативно — архив `release/smart-home-max-production.zip` и рассчитанную для него контрольную сумму SHA-256.
+- **Назначение и основной сценарий.** Описаны в «Границе MVP» и «Проверочном сценарии»: житель создаёт/поддерживает проблему, диспетчер меняет её статус, жители получают уведомления.
+- **Состав и архитектура.** Backend + worker + PostgreSQL + React-диспетчерская + MAX Bot API; подробности — в [ARCHITECTURE.md](ARCHITECTURE.md).
+- **Один Docker-запуск.** Локальная воспроизводимая команда: `docker compose -f compose.yaml -f compose.demo.yaml up --build`.
+- **Параметры окружения и порты.** Полный перечень без секретов — в [.env.example](.env.example). Локальная диспетчерская доступна на `http://localhost:8080`; БД и backend не публикуются отдельно. Production-порты `80/443` и переменные описаны в [DEPLOY_VDS.md](docs/DEPLOY_VDS.md).
+- **Интеграции и данные.** MAX Bot API, собственный REST API и PostgreSQL; состав тестовых домов, квартир, жителей, автомобилей, заявок и служб зафиксирован в [test-data.json](docs/test-data.json). Реальные внешние реестры в MVP не используются.
+- **Тестовые данные и ожидаемый результат.** Seed запускается автоматически в demo compose; после старта доступны два дома, 180 квартир, 450 жителей, 178 автомобилей, 7 заявок и 5 аварийных служб. Проверяемые API-вызовы и ответ описаны в [DATA-API.yaml](DATA-API.yaml), а пользовательский путь — в [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
+- **Зависимости.** Версии зафиксированы в [package.json](package.json) и [pnpm-lock.yaml](pnpm-lock.yaml); для локальной проверки требуются только Docker Engine и Docker Compose v2.
+- **Docker-конфигурация.** В репозитории есть Dockerfile компонентов, `compose.yaml`, `compose.demo.yaml`, `compose.production.yaml`, `.dockerignore`, `.env.example` и `.env.production.example`. В шаблонах нет работающих токенов, паролей или ключей.
+- **Остановка, повторный запуск и логи.** Команды `down`, `down -v` и `logs -f` приведены в [ORGANIZER_HANDOFF.md](docs/ORGANIZER_HANDOFF.md). Известные ограничения перечислены выше.

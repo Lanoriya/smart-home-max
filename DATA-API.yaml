@@ -28,3 +28,21 @@ checks:
     expectedStatusCodes: [200]
     expectedContentType: application/json
     requiredResponseFields: [items]
+  # Запускать на свежей локальной demo-БД после Incident queue.
+  # TEST_INCIDENT_ID=d5000001-0000-4000-8000-000000000001, TEST_INCIDENT_VERSION=1.
+  # При повторном запуске пересоздайте demo-БД: docker compose -f compose.yaml -f compose.demo.yaml down -v.
+  - name: 'Update incident status'
+    method: PATCH
+    path: /api/incidents/${TEST_INCIDENT_ID}
+    role: dispatcher
+    request:
+      cookieFrom: 'Dispatcher login'
+      contentType: application/json
+      body:
+        version: '${TEST_INCIDENT_VERSION}'
+        status: acknowledged
+        dueAt: null
+        publicComment: 'Тестовое изменение статуса диспетчером.'
+    expectedStatusCodes: [200]
+    expectedContentType: application/json
+    requiredResponseFields: [item]
