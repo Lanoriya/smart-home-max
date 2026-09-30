@@ -21,7 +21,7 @@
 Требуются Docker Engine и Docker Compose v2. Node.js, PostgreSQL и локальные зависимости устанавливать не нужно.
 
 ```bash
-unzip smart-home-max-production.zip
+unzip smart-home-max-production.zip -d smart-home-max
 cd smart-home-max
 cp .env.example .env
 docker compose -f compose.yaml -f compose.demo.yaml up --build
