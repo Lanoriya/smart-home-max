@@ -3,25 +3,19 @@ import { z } from 'zod';
 import { requireAdmin } from '../auth/session.js';
 import { prisma } from '../shared/prisma.js';
 import { writeAdminAudit } from '../auth/admin-audit.js';
+import { requireCompanyId, viaBuilding, type AdminActor } from '../auth/scope.js';
+import { announcementSchema, queueAnnouncement } from '../announcements/announcement-service.js';
+import { requireUuidParams } from '../shared/params.js';
 
 export const announcementsRouter = Router();
 announcementsRouter.use(requireAdmin);
-
-const announcementSchema = z.object({
-  audience: z.enum(['all', 'apartment']),
-  apartmentId: z.string().uuid().optional(),
-  text: z.string().trim().min(3).max(2000),
-}).superRefine((value, context) => {
-  if (value.audience === 'apartment' && !value.apartmentId) {
-    context.addIssue({ code: 'custom', path: ['apartmentId'], message: 'Apartment is required' });
-  }
-});
+requireUuidParams(announcementsRouter, 'id');
 
 announcementsRouter.get('/apartments', async (_request, response, next) => {
   try {
     const items = await prisma.apartment.findMany({
-      where: { memberships: { some: { revokedAt: null } } },
-      select: { id: true, number: true, building: { select: { address: true } }, _count: { select: { memberships: { where: { revokedAt: null } } } } },
+      where: { memberships: { some: { revokedAt: null } }, ...viaBuilding(response.locals.companyId) },
+      select: { id: true, number: true, building: { select: { id: true, address: true } }, _count: { select: { memberships: { where: { revokedAt: null } } } } },
     });
     items.sort((left, right) => left.building.address.localeCompare(right.building.address, 'ru') || left.number.localeCompare(right.number, 'ru', { numeric: true }));
     response.json({ items });
@@ -32,27 +26,52 @@ announcementsRouter.post('/', async (request, response, next) => {
   try {
     const parsed = announcementSchema.safeParse(request.body);
     if (!parsed.success) { response.status(400).json({ code: 'invalid_announcement', details: parsed.error.flatten() }); return; }
-    const apartmentFilter = parsed.data.audience === 'apartment' && parsed.data.apartmentId ? { apartmentId: parsed.data.apartmentId } : {};
-    const memberships = await prisma.residentMembership.findMany({
-      where: { revokedAt: null, ...apartmentFilter },
-      distinct: ['userId'],
-      select: { user: { select: { maxUserId: true } } },
-    });
-    if (!memberships.length) { response.status(404).json({ code: 'recipients_not_found' }); return; }
-    const text = parsed.data.audience === 'apartment'
-      ? `Сообщение от диспетчера, адресованное вашей квартире:\n«${parsed.data.text}»`
-      : `Сообщение от диспетчера, адресованное дому:\n«${parsed.data.text}»`;
-    const admin = response.locals.admin as { id: string };
-    await prisma.$transaction(async (tx) => {
-      await tx.outboxMessage.createMany({
-        data: memberships.map(({ user }) => ({ type: 'admin_announcement', payload: { userId: user.maxUserId, text } })),
-      });
-      await writeAdminAudit(tx, admin.id, 'announcement_queued', 'announcement', null, {
-        audience: parsed.data.audience,
-        apartmentId: parsed.data.apartmentId ?? null,
-        recipientsCount: memberships.length,
-      });
-    });
-    response.status(202).json({ recipientsCount: memberships.length });
+    const admin = response.locals.admin as AdminActor;
+    const result = await queueAnnouncement(admin, requireCompanyId(admin, response.locals.companyId), parsed.data);
+    if (!result.ok) { response.status(404).json({ code: result.code }); return; }
+    response.status(202).json({ recipientsCount: result.recipientsCount });
   } catch (error) { next(error); }
 });
+
+const historySchema = z.object({ page: z.coerce.number().int().min(1).max(1000).default(1) });
+const historyPageSize = 20;
+
+announcementsRouter.get('/', async (request, response, next) => {
+  try {
+    const parsed = historySchema.safeParse(request.query);
+    if (!parsed.success) { response.status(400).json({ code: 'invalid_announcement_query' }); return; }
+    const [items, total] = await prisma.$transaction([
+      prisma.announcement.findMany({
+        where: ownAnnouncements(response.locals.companyId),
+        orderBy: { createdAt: 'desc' },
+        skip: (parsed.data.page - 1) * historyPageSize,
+        take: historyPageSize,
+        include: {
+          building: { select: { address: true } },
+          apartment: { select: { number: true, building: { select: { address: true } } } },
+          admin: { select: { username: true } },
+        },
+      }),
+      prisma.announcement.count({ where: ownAnnouncements(response.locals.companyId) }),
+    ]);
+    response.json({ items, total, page: parsed.data.page, pageSize: historyPageSize });
+  } catch (error) { next(error); }
+});
+
+announcementsRouter.delete('/:id', async (request, response, next) => {
+  try {
+    if (!z.string().uuid().safeParse(request.params.id).success) { response.status(404).json({ code: 'announcement_not_found' }); return; }
+    const admin = response.locals.admin as { id: string };
+    const deleted = await prisma.$transaction(async (tx) => {
+      const result = await tx.announcement.deleteMany({ where: { id: request.params.id, ...ownAnnouncements(response.locals.companyId) } });
+      if (result.count) await writeAdminAudit(tx, admin.id, 'announcement_deleted', 'announcement', request.params.id);
+      return result.count;
+    });
+    if (!deleted) { response.status(404).json({ code: 'announcement_not_found' }); return; }
+    response.status(204).end();
+  } catch (error) { next(error); }
+});
+
+function ownAnnouncements(companyId: string | null) {
+  return companyId ? { companyId } : {};
+}

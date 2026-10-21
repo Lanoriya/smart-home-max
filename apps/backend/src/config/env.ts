@@ -28,10 +28,32 @@ const envSchema = z
       z.string().url().optional(),
     ),
     APARTMENT_CODE_PEPPER: z.string().min(12).default('dev-apartment-pepper'),
-    RESIDENT_UK_CODE: z.string().regex(/^\d{10}$/),
     ADMIN_SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(168).default(12),
     ADMIN_COOKIE_SECURE: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+    // Public nick of the bot. Enables "open the app" buttons in the bot and
+    // invitation links of the mini-app.
+    MAX_BOT_USERNAME: z.preprocess(
+      (value) => (value === '' ? undefined : String(value).replace(/^@/, '')),
+      z.string().regex(/^[A-Za-z0-9_]{3,64}$/).optional(),
+    ),
+    // MAX accounts that open the mini-app as platform administrators.
+    PLATFORM_ADMIN_MAX_USER_IDS: z.string().default('').transform((value) => value.split(',').map((item) => item.trim()).filter(Boolean)),
+    // Local development only: lets the mini-app run in a usual browser with
+    // the X-Dev-Max-User-Id header instead of signed MAX launch data.
+    MINIAPP_DEV_AUTH: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+    // Public address of the mini-app, for example https://example.ru/app/.
+    MINIAPP_URL: z.preprocess((value) => (value === '' ? undefined : value), z.string().url().optional()),
+    // open_app — MAX opens the mini-app registered for the bot (needs it to be
+    // set up in "MAX для бизнеса"); link — the bot sends a signed link to
+    // MINIAPP_URL instead, for a bot without a registered mini-app.
+    MINIAPP_OPEN_MODE: z.enum(['open_app', 'link']).default('open_app'),
+    // Reverse geocoder (Nominatim API) used to recognise a house by a point.
+    GEOCODER_URL: z.string().url().default('https://nominatim.openstreetmap.org'),
+    // Search-as-you-type of cities and streets (Photon API over OpenStreetMap).
+    SUGGEST_URL: z.string().url().default('https://photon.komoot.io'),
+    // Folder of the photos sent from the mini-app (a volume in Docker).
+    PHOTOS_DIR: z.string().min(1).default(resolve(process.cwd(), 'data/photos')),
   })
   .superRefine((value, context) => {
     if (value.MAX_MODE === 'api' && !value.MAX_BOT_TOKEN) {
@@ -64,9 +86,6 @@ const envSchema = z
       if (value.DATABASE_URL.includes('change-me')) {
         context.addIssue({ code: 'custom', path: ['DATABASE_URL'], message: 'Database password must be replaced in production' });
       }
-      if (value.RESIDENT_UK_CODE === '0000000000') {
-        context.addIssue({ code: 'custom', path: ['RESIDENT_UK_CODE'], message: 'Resident access code must be replaced in production' });
-      }
       if (value.MAX_WEBHOOK_SECRET.length < 24) {
         context.addIssue({ code: 'custom', path: ['MAX_WEBHOOK_SECRET'], message: 'Production webhook secret must contain at least 24 characters' });
       }
@@ -75,6 +94,9 @@ const envSchema = z
       }
       if (!value.ADMIN_WEB_ORIGIN.startsWith('https://') || !value.MAX_PUBLIC_WEBHOOK_URL?.startsWith('https://')) {
         context.addIssue({ code: 'custom', path: ['ADMIN_WEB_ORIGIN'], message: 'Production public URLs must use HTTPS' });
+      }
+      if (value.MINIAPP_DEV_AUTH) {
+        context.addIssue({ code: 'custom', path: ['MINIAPP_DEV_AUTH'], message: 'Development sign-in of the mini-app is forbidden in production' });
       }
       if (value.TRUST_PROXY_HOPS === 0) {
         context.addIssue({ code: 'custom', path: ['TRUST_PROXY_HOPS'], message: 'Production reverse proxy must be trusted explicitly' });

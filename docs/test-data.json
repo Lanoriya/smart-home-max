@@ -1,45 +1,61 @@
 {
   "formatVersion": "1.0",
-  "title": "Демонстрационные данные MVP «Дом в порядке»",
+  "title": "Демонстрационные данные MVP «Домовед»",
   "scope": "local-demo-only",
   "setup": {
     "command": "docker compose -f compose.yaml -f compose.demo.yaml up --build",
     "resetCommand": "docker compose -f compose.yaml -f compose.demo.yaml down -v",
-    "generator": "apps/backend/prisma/seed.ts",
+    "generator": [
+      "apps/backend/prisma/seed.ts",
+      "apps/backend/prisma/seed-extra.ts"
+    ],
     "mode": "MAX_MODE=fake",
     "dispatcher": {
       "username": "dispatcher",
       "password": "change-this-demo-password"
     },
-    "residentUkCode": "0000000000"
+    "miniApp": {
+      "url": "http://localhost:8080/app/?dev=<MAX user_id>",
+      "requires": "MINIAPP_DEV_AUTH=true (только локально)",
+      "platformAdmin": "MAX user_id из PLATFORM_ADMIN_MAX_USER_IDS, например 900"
+    }
   },
   "expectedCounts": {
-    "buildings": 2,
-    "apartments": 180,
-    "residents": 450,
-    "vehicles": 178,
-    "incidents": 7,
+    "companies": 3,
+    "buildings": 8,
+    "apartments": 762,
+    "residents": 544,
+    "vehicles": 218,
+    "incidents": 26,
     "emergencyServices": 5
   },
   "buildings": [
     {
       "id": "d1000000-0000-4000-8000-000000000001",
-      "address": "Тестовый №1 Улица демонстрации 10",
+      "address": "Тестовый №1 Улица демонстрации, 10",
       "entrancesCount": 3,
       "apartmentsCount": 100,
-      "apartmentNumbers": "1..100"
+      "apartmentNumbers": "1..100",
+      "accessCode": "1000000001"
     },
     {
       "id": "d1100000-0000-4000-8000-000000000002",
-      "address": "Тестовый №2 Улица демонстрации 13",
+      "address": "Тестовый №2 Улица демонстрации, 13",
       "entrancesCount": 4,
       "apartmentsCount": 80,
-      "apartmentNumbers": "1..80"
+      "apartmentNumbers": "1..80",
+      "accessCode": "1000000002"
     }
   ],
   "residentsAndVehicles": {
-    "residentsPerApartment": { "min": 1, "max": 4 },
-    "vehiclesPerApartment": { "min": 0, "max": 2 },
+    "residentsPerApartment": {
+      "min": 1,
+      "max": 4
+    },
+    "vehiclesPerApartment": {
+      "min": 0,
+      "max": 2
+    },
     "phonePattern": "+7900<дом><номерКвартиры:5><номерЖителя>",
     "allNamesPhonesPlates": "synthetic-demo-data"
   },
@@ -50,7 +66,10 @@
       "status": "in_progress",
       "reportsCount": 3,
       "commentsCount": 2,
-      "apiStatusUpdateFixture": { "version": 1, "targetStatus": "acknowledged" }
+      "apiStatusUpdateFixture": {
+        "version": 1,
+        "targetStatus": "acknowledged"
+      }
     },
     {
       "id": "d5000002-0000-4000-8000-000000000002",
@@ -93,5 +112,73 @@
       "archived": true
     }
   ],
-  "emergencyServices": "5 synthetic services with +7 (900) 000-00-01..05"
+  "emergencyServices": "5 synthetic services with +7 (900) 000-00-01..05",
+  "companies": [
+    {
+      "id": "c0000000-0000-4000-8000-000000000001",
+      "name": "Тестовая УК «Северная»",
+      "buildings": [
+        "Тестовый №1 Улица демонстрации, 10",
+        "Тестовый №2 Улица демонстрации, 13",
+        "пер. Тестовый Школьный, 3"
+      ],
+      "webDispatcher": "dispatcher"
+    },
+    {
+      "id": "c0000000-0000-4000-8000-000000000002",
+      "name": "Тестовая УК «Речная»",
+      "buildings": [
+        "ул. Тестовая Садовая, 5",
+        "ул. Тестовая Садовая, 7, корп. 1",
+        "ул. Тестовая Садовая, 7, корп. 2",
+        "ул. Тестовая Новая, 1"
+      ]
+    },
+    {
+      "id": "c0000000-0000-4000-8000-000000000003",
+      "name": "Тестовое ТСЖ «Мира»",
+      "buildings": [
+        "пр. Тестовый Мира, 12"
+      ]
+    }
+  ],
+  "extraBuildings": [
+    {
+      "address": "ул. Тестовая Садовая, 5",
+      "accessCode": "2000000001",
+      "apartmentsCount": 40,
+      "entrancesCount": 2
+    },
+    {
+      "address": "ул. Тестовая Садовая, 7, корп. 1",
+      "accessCode": "2000000002",
+      "apartmentsCount": 60,
+      "entrancesCount": 3
+    },
+    {
+      "address": "ул. Тестовая Садовая, 7, корп. 2",
+      "accessCode": "2000000003",
+      "apartmentsCount": 24,
+      "entrancesCount": 1
+    },
+    {
+      "address": "пр. Тестовый Мира, 12",
+      "accessCode": "2000000004",
+      "apartmentsCount": 150,
+      "entrancesCount": 6
+    },
+    {
+      "address": "пер. Тестовый Школьный, 3",
+      "accessCode": "2000000005",
+      "apartmentsCount": 8,
+      "entrancesCount": 1
+    },
+    {
+      "address": "ул. Тестовая Новая, 1",
+      "accessCode": "2000000006",
+      "apartmentsCount": 300,
+      "entrancesCount": 10
+    }
+  ],
+  "coordinatesNote": "Координаты домов и офисов вымышленные, разнесены по району Екатеринбурга только для демонстрации карты."
 }

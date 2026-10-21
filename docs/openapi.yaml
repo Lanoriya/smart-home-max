@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
-  title: Дом в порядке API
+  title: Домовед API
   version: 0.1.0
-  description: Собственный API MVP. Все маршруты `/api/*`, кроме health, требуют cookie-сессию диспетчера.
+  description: 'Собственный API MVP. Маршруты `/api/*` веб-диспетчерской требуют cookie-сессию диспетчера и ограничены домами его УК. Маршруты `/api/app/*` обслуживают мини-приложение MAX и требуют заголовок `Authorization: MaxWebApp <initData>` с подписанными данными запуска.'
 servers:
   - url: https://jorwey.ru
     description: Production
@@ -57,6 +57,9 @@ paths:
           in: query
           description: Порядок очереди по дате создания или числу подключившихся жителей.
           schema: { type: string, enum: [importance_desc, importance_asc, date_desc, date_asc], default: importance_desc }
+        - { name: buildingId, in: query, schema: { type: string, format: uuid }, description: Только заявки одного дома }
+        - { name: street, in: query, schema: { type: string }, description: Только заявки домов одной улицы }
+        - { name: number, in: query, schema: { type: integer, minimum: 1 }, description: 'Поиск по сквозному номеру заявки; игнорирует archive и фильтры адреса' }
       responses: { '200': { description: Список, content: { application/json: { schema: { $ref: '#/components/schemas/IncidentList' } } } }, '401': { $ref: '#/components/responses/Unauthorized' } }
   /api/incidents/{id}:
     get:
@@ -136,6 +139,17 @@ paths:
       summary: Поставить объявление в очередь MAX
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Announcement' } } } }
       responses: { '202': { description: Рассылка поставлена в очередь }, '404': { description: Получатели не найдены } }
+    get:
+      security: [{ cookieAuth: [] }]
+      summary: Архив отправленных объявлений, по 20 на страницу
+      parameters: [{ name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }]
+      responses: { '200': { description: 'items, total, page, pageSize' } }
+  /api/announcements/{id}:
+    delete:
+      security: [{ cookieAuth: [] }]
+      summary: Удалить объявление из архива бота
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '204': { description: Удалено }, '404': { $ref: '#/components/responses/NotFound' } }
   /api/announcements/apartments:
     get:
       security: [{ cookieAuth: [] }]
@@ -155,22 +169,181 @@ paths:
       summary: Удалить контакт службы
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses: { '204': { description: Контакт удалён } }
-  /api/settings/uk-code:
+  /api/settings/uk-contacts:
     get:
       security: [{ cookieAuth: [] }]
-      summary: Маскированный код УК или раскрытие по ?reveal=true
-      description: Раскрытие полного кода требует роли supervisor и записывается в аудит.
-      parameters: [{ name: reveal, in: query, schema: { type: boolean, default: false } }]
-      responses: { '200': { description: no-store ответ с кодом или маской }, '403': { $ref: '#/components/responses/Forbidden' } }
+      summary: Контакты управляющей компании для раздела бота «Контакты УК»
+      responses: { '200': { description: 'Контакты или item=null, если не заданы' } }
+    put:
+      security: [{ cookieAuth: [] }]
+      summary: Сохранить контакты УК
+      description: Операция записывается в административный аудит.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, phone], properties: { name: { type: string }, phone: { type: string }, email: { type: string, nullable: true }, address: { type: string, nullable: true }, workingHours: { type: string, nullable: true }, note: { type: string, nullable: true } } } } } }
+      responses: { '200': { description: Контакты сохранены }, '400': { description: Ошибка DTO } }
+  /api/buildings/{id}/access-code:
+    get:
+      security: [{ cookieAuth: [] }]
+      summary: Показать десятизначный код дома
+      description: Требуется роль supervisor. Раскрытие записывается в аудит.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: no-store ответ с кодом }, '403': { $ref: '#/components/responses/Forbidden' } }
     patch:
       security: [{ cookieAuth: [] }]
-      summary: Сменить общий десятизначный код УК
-      description: Требуется роль supervisor. Операция записывается в административный аудит.
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string, pattern: '^\\d{10}$' } } } } } }
-      responses: { '200': { description: Код обновлён }, '400': { description: Неверный формат }, '403': { $ref: '#/components/responses/Forbidden' } }
+      summary: Сменить код дома
+      description: Требуется роль supervisor. Без поля code генерируется новый случайный код.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { required: false, content: { application/json: { schema: { type: object, properties: { code: { type: string, pattern: '^\\d{10}$' } } } } } }
+      responses: { '200': { description: Новый код }, '400': { description: Неверный формат }, '403': { $ref: '#/components/responses/Forbidden' } }
+  /api/app/me:
+    get:
+      summary: Кто открыл мини-приложение
+      description: Житель — адрес и УК; сотрудник — роль и УК; администратор платформы — роль platform_admin.
+      security: [{ maxWebApp: [] }]
+      responses:
+        '200': { description: Профиль, адрес, роль }
+        '401': { description: Нет или просрочены данные запуска MAX }
+  /api/app/map:
+    get:
+      summary: Дома и управляющие компании на карте
+      description: Для каждого дома — точка и число открытых общих проблем, без их текстов.
+      security: [{ maxWebApp: [] }]
+      responses:
+        '200': { description: Список УК и домов }
+  /api/app/buildings/{id}:
+    get:
+      summary: Карточка дома
+      description: Тексты открытых проблем видны только жителям этого дома.
+      security: [{ maxWebApp: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Дом, его УК и открытые проблемы }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/app/residence:
+    post:
+      summary: Подтвердить квартиру кодом дома
+      security: [{ maxWebApp: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [buildingId, apartmentNumber, buildingCode], properties: { buildingId: { type: string, format: uuid }, apartmentNumber: { type: string }, buildingCode: { type: string, description: 10 цифр }, apartmentCode: { type: string } } } } }
+      responses:
+        '200': { description: 'status: bound | join_requested | apartment_code_required' }
+        '403': { description: 'wrong_building_code или wrong_apartment_code, attemptsLeft' }
+        '404': { description: apartment_not_found }
+        '429': { description: too_many_attempts — больше 5 неверных кодов за час }
+    delete:
+      summary: Отвязаться от квартиры
+      security: [{ maxWebApp: [] }]
+      responses:
+        '204': { description: Привязка снята }
+  /api/app/incidents:
+    get:
+      summary: Мои заявки или общие заявки моего дома
+      security: [{ maxWebApp: [] }]
+      parameters: [{ name: scope, in: query, schema: { type: string, enum: [mine, building] } }]
+      responses:
+        '200': { description: Список заявок }
+    post:
+      summary: Создать заявку
+      security: [{ maxWebApp: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/MiniAppDraft' } } }
+      responses:
+        '201': { description: Номер созданной заявки }
+        '400': { description: 'invalid_incident, zone_required, entrance_required, residence_required' }
+  /api/app/incidents/similar:
+    post:
+      summary: Открытые заявки соседей, похожие на черновик
+      description: Показываются перед созданием заявки, чтобы житель присоединился вместо дубля.
+      security: [{ maxWebApp: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/MiniAppDraft' } } }
+      responses:
+        '200': { description: До трёх совпадений }
+  /api/app/incidents/{ref}:
+    get:
+      summary: Карточка заявки по id или номеру
+      security: [{ maxWebApp: [] }]
+      parameters: [{ name: ref, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Заявка, ход работ, обсуждение }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/app/incidents/{id}/join:
+    post:
+      summary: «У меня то же самое» — присоединиться к общей заявке
+      description: На 3, 5 и 10 жителях приоритет заявки повышается, сотрудники УК получают уведомление в MAX.
+      security: [{ maxWebApp: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: alreadyJoined }
+  /api/app/company/overview:
+    get:
+      summary: Пульт УК — метрики за 30 дней
+      description: Для администратора платформы требуется заголовок X-Company-Id.
+      security: [{ maxWebApp: [] }]
+      responses:
+        '200': { description: Карточка УК и метрики }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/app/company/incidents:
+    get:
+      summary: Очередь заявок УК
+      security: [{ maxWebApp: [] }]
+      responses:
+        '200': { description: До 100 заявок домов этой УК }
+  /api/app/company/incidents/{id}:
+    patch:
+      summary: Изменить статус, срок, оставить комментарий жителям
+      security: [{ maxWebApp: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/IncidentPatch' } } }
+      responses:
+        '200': { description: Заявка изменена, жители уведомлены }
+        '404': { description: Заявка другой УК или не существует }
+        '409': { description: 'invalid_status_transition или incident_version_conflict' }
+  /api/app/company/buildings:
+    post:
+      summary: Добавить дом с точкой на карте
+      security: [{ maxWebApp: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/BuildingInput' } } }
+      responses:
+        '201': { description: Дом и его код для жителей }
+        '409': { description: building_exists }
+  /api/app/platform/overview:
+    get:
+      summary: Пульт платформы — все УК и их метрики
+      security: [{ maxWebApp: [] }]
+      responses:
+        '200': { description: Итог и метрики по каждой УК }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/app/platform/companies:
+    post:
+      summary: Подключить управляющую компанию
+      security: [{ maxWebApp: [] }]
+      responses:
+        '201': { description: УК создана }
+  /api/app/platform/companies/{id}/invites:
+    post:
+      summary: Одноразовое приглашение сотрудника УК
+      security: [{ maxWebApp: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '201': { description: 'Ссылка https://max.ru/<бот>?startapp=invite_<токен>, действует 7 дней' }
+  /api/app/invites/accept:
+    post:
+      summary: Принять приглашение в команду УК
+      security: [{ maxWebApp: [] }]
+      responses:
+        '200': { description: Роль и УК }
+        '409': { description: 'invite_used, invite_expired, admin_of_another_company' }
 components:
   securitySchemes:
     cookieAuth: { type: apiKey, in: cookie, name: smart_home_admin }
+    maxWebApp: { type: apiKey, in: header, name: Authorization, description: 'MaxWebApp <initData> — подписанные данные запуска мини-приложения MAX' }
   parameters:
     IncidentId: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
   responses:
@@ -184,6 +357,7 @@ components:
     IncidentList: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Incident' } } } }
     Incident: { type: object, required: [id, title, status, version], properties: { id: { type: string, format: uuid }, title: { type: string }, status: { type: string, enum: [new, acknowledged, in_progress, resolved, rejected] }, version: { type: integer, minimum: 1 } } }
     IncidentPatch: { type: object, required: [version, dueAt], properties: { version: { type: integer, minimum: 1 }, status: { type: string, enum: [new, acknowledged, in_progress, resolved, rejected] }, dueAt: { type: [string, 'null'], format: date-time }, publicComment: { type: string, minLength: 3, maxLength: 1000 } } }
-    BuildingInput: { type: object, required: [address, apartmentsCount, entrancesCount], properties: { address: { type: string }, apartmentsCount: { type: integer, minimum: 1, maximum: 2000 }, entrancesCount: { type: integer, minimum: 1, maximum: 50 }, chatLink: { type: [string, 'null'], format: uri } } }
+    MiniAppDraft: { type: object, required: [scope, category], properties: { scope: { type: string, enum: [building, apartment] }, category: { type: string, enum: [water, electricity, heating, elevator, leak, cleaning, other] }, locationZone: { type: string, enum: [entrance, elevator, yard, common] }, entranceNumber: { type: integer, minimum: 1 }, description: { type: string, minLength: 5, maxLength: 500 } } }
+    BuildingInput: { type: object, required: [street, house, apartmentsCount, entrancesCount], properties: { latitude: { type: [number, 'null'] }, longitude: { type: [number, 'null'] }, street: { type: string, description: 'Улица; дома с одинаковой улицей группируются' }, house: { type: string, description: 'Номер дома с корпусом; пара улица+дом уникальна, иначе 409 building_exists' }, apartmentsCount: { type: integer, minimum: 1, maximum: 2000 }, entrancesCount: { type: integer, minimum: 1, maximum: 50 }, chatLink: { type: [string, 'null'], format: uri } } }
     ApartmentPatch: { type: object, required: [number, residentsCount, people, vehicles], properties: { number: { type: string }, residentsCount: { type: [integer, 'null'] }, inviteCode: { type: [string, 'null'], description: При передаче сохраняется только хеш }, people: { type: array }, vehicles: { type: array } } }
-    Announcement: { type: object, required: [audience, text], properties: { audience: { type: string, enum: [all, apartment] }, apartmentId: { type: string, format: uuid }, text: { type: string, minLength: 3, maxLength: 2000 } } }
+    Announcement: { type: object, required: [audience, text], properties: { audience: { type: string, enum: [all, street, building, apartment] }, street: { type: string, description: 'Обязательна при audience=street' }, buildingId: { type: string, format: uuid, description: 'Обязателен при audience=building' }, apartmentId: { type: string, format: uuid, description: 'Обязателен при audience=apartment' }, text: { type: string, minLength: 3, maxLength: 2000 } } }

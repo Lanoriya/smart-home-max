@@ -1,0 +1,689 @@
+{
+  "note": "Реальные адреса и характеристики домов: Екатеринбург — открытые данные ППК «Фонд развития территорий» (отчёт КР 1.1) и координаты OpenStreetMap; остальные города — OpenStreetMap (ODbL). Управляющие компании условные, жителей нет. Число подъездов оценено по числу квартир и этажей.",
+  "cities": [
+    {
+      "city": "Екатеринбург",
+      "region": "Свердловская область",
+      "source": "registry",
+      "houses": [
+        {
+          "street": "бульвар Академика Семихатова Н. А.",
+          "house": "18",
+          "latitude": 56.785339,
+          "longitude": 60.544744,
+          "floors": 26,
+          "builtYear": 2015,
+          "apartments": 124,
+          "totalArea": 51156.52,
+          "fiasGuid": "3c649bc6-ec1e-4108-8bc8-6489081d8632"
+        },
+        {
+          "street": "Сызранский переулок",
+          "house": "15",
+          "latitude": 56.771365,
+          "longitude": 60.609123,
+          "floors": 21,
+          "builtYear": 2016,
+          "apartments": 155,
+          "totalArea": 14298.7,
+          "fiasGuid": "e59fadcd-859a-496c-9bce-b38e1854ed4d"
+        },
+        {
+          "street": "Утренний переулок",
+          "house": "7",
+          "latitude": 56.75883,
+          "longitude": 60.813407,
+          "floors": 16,
+          "builtYear": 2015,
+          "apartments": 335,
+          "totalArea": 17236.9,
+          "fiasGuid": "d385f58b-138c-4db5-989d-36977d0a6896"
+        },
+        {
+          "street": "улица 22-го Партсъезда",
+          "house": "3/2",
+          "latitude": 56.885856,
+          "longitude": 60.580389,
+          "floors": 25,
+          "builtYear": 2025,
+          "apartments": 58,
+          "totalArea": 18314,
+          "fiasGuid": "469df8a2-b38f-4d0f-b071-178d7d26ace1"
+        },
+        {
+          "street": "улица 8 Марта",
+          "house": "204Е",
+          "latitude": 56.795082,
+          "longitude": 60.603903,
+          "floors": 25,
+          "builtYear": 2025,
+          "apartments": 108,
+          "totalArea": 23641.5,
+          "fiasGuid": "a83c4be0-54bf-4c9a-8486-62c53b2fba71"
+        },
+        {
+          "street": "Автомагистральная улица",
+          "house": "3",
+          "latitude": 56.867925,
+          "longitude": 60.564177,
+          "floors": 9,
+          "builtYear": 1977,
+          "apartments": 215,
+          "totalArea": 11745.2,
+          "fiasGuid": "4a313c4f-1122-438e-9aa9-ef54701a6598"
+        },
+        {
+          "street": "улица Амундсена",
+          "house": "118А",
+          "latitude": 56.773367,
+          "longitude": 60.544933,
+          "floors": 26,
+          "builtYear": 2016,
+          "apartments": 230,
+          "totalArea": 16242,
+          "fiasGuid": "1ad62a48-e98c-4af6-b2ce-82da53df6a77"
+        },
+        {
+          "street": "улица Баумана",
+          "house": "35",
+          "latitude": 56.894453,
+          "longitude": 60.633209,
+          "floors": 19,
+          "builtYear": 2014,
+          "apartments": 173,
+          "totalArea": 17139.4,
+          "fiasGuid": "8402c5ee-34bc-4ed5-bf93-0680c6338a24"
+        },
+        {
+          "street": "улица Бебеля",
+          "house": "156",
+          "latitude": 56.868806,
+          "longitude": 60.553323,
+          "floors": 9,
+          "builtYear": 1977,
+          "apartments": 342,
+          "totalArea": 20349.68,
+          "fiasGuid": "b7b5123b-5679-453f-87b9-bf64e646d701"
+        },
+        {
+          "street": "улица Викулова",
+          "house": "41Б",
+          "latitude": 56.829359,
+          "longitude": 60.546556,
+          "floors": 15,
+          "builtYear": 2025,
+          "apartments": 23,
+          "totalArea": 11418.4,
+          "fiasGuid": "7f520f91-4fff-4017-b3b6-ba1c92d50b12"
+        },
+        {
+          "street": "Газетная улица",
+          "house": "63",
+          "latitude": 56.761761,
+          "longitude": 60.5997,
+          "floors": 9,
+          "builtYear": 1986,
+          "apartments": 51,
+          "totalArea": 4500.9,
+          "fiasGuid": "a5b33034-2c2c-46ca-8ae3-d2d863f026c0"
+        },
+        {
+          "street": "улица Евгения Савкова",
+          "house": "3",
+          "latitude": 56.795573,
+          "longitude": 60.494707,
+          "floors": 18,
+          "builtYear": 2014,
+          "apartments": 215,
+          "totalArea": 20192.8,
+          "fiasGuid": "5101801a-380e-40cc-ba93-7f89eca2ec0d"
+        }
+      ]
+    },
+    {
+      "city": "Казань",
+      "region": "Татарстан",
+      "source": "osm",
+      "houses": [
+        {
+          "street": "улица Новаторов",
+          "house": "12",
+          "latitude": 55.805721,
+          "longitude": 49.175069,
+          "floors": 5,
+          "builtYear": 1965,
+          "apartments": 80,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Зур Урам",
+          "house": "12",
+          "latitude": 55.807417,
+          "longitude": 49.196864,
+          "floors": 5,
+          "builtYear": 1972,
+          "apartments": 68,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "Сибирский тракт",
+          "house": "7/6",
+          "latitude": 55.805196,
+          "longitude": 49.183715,
+          "floors": 4,
+          "builtYear": 1953,
+          "apartments": 37,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Николая Ершова",
+          "house": "78",
+          "latitude": 55.800999,
+          "longitude": 49.1835,
+          "floors": 5,
+          "builtYear": 1963,
+          "apartments": 80,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Бари Галеева",
+          "house": "8",
+          "latitude": 55.802574,
+          "longitude": 49.176486,
+          "floors": 5,
+          "builtYear": 1967,
+          "apartments": 100,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Дружбы",
+          "house": "12",
+          "latitude": 55.807772,
+          "longitude": 49.177948,
+          "floors": 5,
+          "builtYear": 1961,
+          "apartments": 60,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Заря",
+          "house": "24",
+          "latitude": 55.808412,
+          "longitude": 49.178122,
+          "floors": 5,
+          "builtYear": 1963,
+          "apartments": 48,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Академика Губкина",
+          "house": "3",
+          "latitude": 55.803637,
+          "longitude": 49.187079,
+          "floors": 5,
+          "builtYear": 1961,
+          "apartments": 64,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Академика Кирпичникова",
+          "house": "14",
+          "latitude": 55.808627,
+          "longitude": 49.186882,
+          "floors": 5,
+          "builtYear": 1960,
+          "apartments": 64,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Журналистов",
+          "house": "3",
+          "latitude": 55.807171,
+          "longitude": 49.190185,
+          "floors": 5,
+          "builtYear": 1960,
+          "apartments": 80,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "Шоссейная улица",
+          "house": "24",
+          "latitude": 55.807699,
+          "longitude": 49.082376,
+          "floors": 5,
+          "builtYear": 1990,
+          "apartments": 70,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Лушникова",
+          "house": "1",
+          "latitude": 55.819258,
+          "longitude": 49.081953,
+          "floors": 5,
+          "builtYear": 1970,
+          "apartments": 80,
+          "totalArea": null,
+          "fiasGuid": null
+        }
+      ]
+    },
+    {
+      "city": "Челябинск",
+      "region": "Челябинская область",
+      "source": "osm",
+      "houses": [
+        {
+          "street": "улица Братьев Кашириных",
+          "house": "54",
+          "latitude": 55.179458,
+          "longitude": 61.367347,
+          "floors": 11,
+          "builtYear": 1999,
+          "apartments": 368,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Чайковского",
+          "house": "58",
+          "latitude": 55.179687,
+          "longitude": 61.351458,
+          "floors": 19,
+          "builtYear": 2010,
+          "apartments": 221,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "проспект Ленина",
+          "house": "68А",
+          "latitude": 55.161166,
+          "longitude": 61.377053,
+          "floors": 6,
+          "builtYear": null,
+          "apartments": 68,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Университетская Набережная",
+          "house": "30",
+          "latitude": 55.175319,
+          "longitude": 61.34946,
+          "floors": 9,
+          "builtYear": null,
+          "apartments": 396,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Косарева",
+          "house": "71А",
+          "latitude": 55.180477,
+          "longitude": 61.374936,
+          "floors": 10,
+          "builtYear": null,
+          "apartments": 149,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "Двинская улица",
+          "house": "3",
+          "latitude": 55.181183,
+          "longitude": 61.350662,
+          "floors": 10,
+          "builtYear": null,
+          "apartments": 99,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Елькина",
+          "house": "110",
+          "latitude": 55.143654,
+          "longitude": 61.4001,
+          "floors": 10,
+          "builtYear": null,
+          "apartments": 143,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Шаумяна",
+          "house": "118",
+          "latitude": 55.143605,
+          "longitude": 61.396918,
+          "floors": 10,
+          "builtYear": null,
+          "apartments": 27,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "Загородная улица",
+          "house": "12",
+          "latitude": 55.143303,
+          "longitude": 61.39875,
+          "floors": 10,
+          "builtYear": null,
+          "apartments": 110,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "2-я Окружная улица",
+          "house": "1",
+          "latitude": 55.144127,
+          "longitude": 61.399278,
+          "floors": 10,
+          "builtYear": null,
+          "apartments": 39,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "проспект Победы",
+          "house": "238",
+          "latitude": 55.184953,
+          "longitude": 61.37035,
+          "floors": 12,
+          "builtYear": null,
+          "apartments": 437,
+          "totalArea": null,
+          "fiasGuid": null
+        }
+      ]
+    },
+    {
+      "city": "Пермь",
+      "region": "Пермский край",
+      "source": "osm",
+      "houses": [
+        {
+          "street": "Рабочая улица",
+          "house": "1",
+          "latitude": 57.993302,
+          "longitude": 56.201457,
+          "floors": 5,
+          "builtYear": 1972,
+          "apartments": 100,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Блюхера",
+          "house": "7",
+          "latitude": 57.99558,
+          "longitude": 56.212499,
+          "floors": 5,
+          "builtYear": 1967,
+          "apartments": 90,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Челюскинцев",
+          "house": "23",
+          "latitude": 57.986128,
+          "longitude": 56.231114,
+          "floors": 19,
+          "builtYear": 2012,
+          "apartments": 264,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Клары Цеткин",
+          "house": "25",
+          "latitude": 57.990174,
+          "longitude": 56.239786,
+          "floors": 9,
+          "builtYear": 1982,
+          "apartments": 171,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Механошина",
+          "house": "15",
+          "latitude": 58.00104,
+          "longitude": 56.237707,
+          "floors": 25,
+          "builtYear": 2014,
+          "apartments": 238,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "Локомотивная улица",
+          "house": "1А",
+          "latitude": 57.996259,
+          "longitude": 56.189885,
+          "floors": 25,
+          "builtYear": 2018,
+          "apartments": 160,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "Кронштадтская улица",
+          "house": "47",
+          "latitude": 57.998614,
+          "longitude": 56.20111,
+          "floors": 17,
+          "builtYear": 2018,
+          "apartments": 144,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Левченко",
+          "house": "29",
+          "latitude": 57.988938,
+          "longitude": 56.223558,
+          "floors": 15,
+          "builtYear": 2019,
+          "apartments": 196,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Капитана Гастелло",
+          "house": "5",
+          "latitude": 57.989827,
+          "longitude": 56.224236,
+          "floors": 9,
+          "builtYear": 2018,
+          "apartments": 89,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "Луньевская улица",
+          "house": "5",
+          "latitude": 57.990758,
+          "longitude": 56.219672,
+          "floors": 16,
+          "builtYear": 2018,
+          "apartments": 128,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "Бершетский переулок",
+          "house": "6",
+          "latitude": 57.990639,
+          "longitude": 56.220759,
+          "floors": 16,
+          "builtYear": 2019,
+          "apartments": 128,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "бульвар Гагарина",
+          "house": "74В",
+          "latitude": 57.994112,
+          "longitude": 56.285585,
+          "floors": 22,
+          "builtYear": 2019,
+          "apartments": 334,
+          "totalArea": null,
+          "fiasGuid": null
+        }
+      ]
+    },
+    {
+      "city": "Новосибирск",
+      "region": "Новосибирская область",
+      "source": "osm",
+      "houses": [
+        {
+          "street": "улица Стофато",
+          "house": "9",
+          "latitude": 55.030522,
+          "longitude": 82.977436,
+          "floors": 10,
+          "builtYear": 2015,
+          "apartments": 100,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "Советская улица",
+          "house": "35",
+          "latitude": 55.03009,
+          "longitude": 82.915596,
+          "floors": 5,
+          "builtYear": 1953,
+          "apartments": 103,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "Трудовая улица",
+          "house": "3",
+          "latitude": 55.032286,
+          "longitude": 82.917592,
+          "floors": 4,
+          "builtYear": 1931,
+          "apartments": 30,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Гаранина",
+          "house": "41",
+          "latitude": 55.025711,
+          "longitude": 82.972476,
+          "floors": 17,
+          "builtYear": 2023,
+          "apartments": 176,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Шевченко",
+          "house": "34",
+          "latitude": 55.023395,
+          "longitude": 82.942129,
+          "floors": 10,
+          "builtYear": 1991,
+          "apartments": 428,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Белинского",
+          "house": "3",
+          "latitude": 55.024011,
+          "longitude": 82.944558,
+          "floors": 10,
+          "builtYear": 1990,
+          "apartments": 320,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Максима Горького",
+          "house": "95",
+          "latitude": 55.028605,
+          "longitude": 82.932033,
+          "floors": 11,
+          "builtYear": 1987,
+          "apartments": 159,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Селезнёва",
+          "house": "33",
+          "latitude": 55.043932,
+          "longitude": 82.94418,
+          "floors": 9,
+          "builtYear": 1973,
+          "apartments": 216,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Крылова",
+          "house": "89",
+          "latitude": 55.043055,
+          "longitude": 82.944576,
+          "floors": 5,
+          "builtYear": 1973,
+          "apartments": 90,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Красина",
+          "house": "66",
+          "latitude": 55.047481,
+          "longitude": 82.961376,
+          "floors": 9,
+          "builtYear": 2018,
+          "apartments": 120,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Ватутина",
+          "house": "49",
+          "latitude": 54.980059,
+          "longitude": 82.903413,
+          "floors": 5,
+          "builtYear": 1963,
+          "apartments": 79,
+          "totalArea": null,
+          "fiasGuid": null
+        },
+        {
+          "street": "улица Плахотного",
+          "house": "51/1",
+          "latitude": 54.984856,
+          "longitude": 82.861459,
+          "floors": 5,
+          "builtYear": 1972,
+          "apartments": 65,
+          "totalArea": null,
+          "fiasGuid": null
+        }
+      ]
+    }
+  ]
+}

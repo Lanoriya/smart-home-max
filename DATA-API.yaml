@@ -1,6 +1,6 @@
 # Verify schemaVersion against the DATA-API specification issued by the organisers.
 schemaVersion: '1.0'
-solution: 'Дом в порядке'
+solution: 'Домовед'
 baseUrl: 'https://jorwey.ru'
 checks:
   - name: 'Health check'

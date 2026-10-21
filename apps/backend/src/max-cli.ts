@@ -30,6 +30,17 @@ async function main() {
     return;
   }
 
+  if (command === 'unsubscribe') {
+    // Long polling receives nothing while a webhook is registered, so local
+    // testing with the production bot requires removing the subscription.
+    const url = process.argv[3] ?? env.MAX_PUBLIC_WEBHOOK_URL;
+    if (!url) {
+      throw new Error('Pass the webhook URL or configure MAX_PUBLIC_WEBHOOK_URL');
+    }
+    console.log(JSON.stringify(await messenger.deleteWebhookSubscription(url), null, 2));
+    return;
+  }
+
   throw new Error(`Unknown MAX command: ${command}`);
 }
 

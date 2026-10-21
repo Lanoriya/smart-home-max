@@ -11,7 +11,6 @@ const production = {
   MAX_WEBHOOK_SECRET: '0123456789abcdefghijklmn',
   MAX_PUBLIC_WEBHOOK_URL: 'https://dispatcher.example.test/webhooks/max',
   APARTMENT_CODE_PEPPER: '0123456789abcdefghijklmnopqrstuv',
-  RESIDENT_UK_CODE: '1234567890',
   ADMIN_COOKIE_SECURE: 'true',
   TRUST_PROXY_HOPS: '2',
 };
@@ -25,7 +24,6 @@ describe('production environment validation', () => {
     expect(() => parseEnv({
       ...production,
       DATABASE_URL: 'postgresql://app:change-me@db:5432/smart_home',
-      RESIDENT_UK_CODE: '0000000000',
       ADMIN_COOKIE_SECURE: 'false',
     })).toThrow();
   });

@@ -13,7 +13,7 @@
 1. Распакуйте переданный архив на сервере. Архив не содержит секретов и тестовой БД:
 
    ```bash
-   unzip smart-home-max-production.zip -d smart-home-max
+   unzip "Хакатон MAX - Умный город - матрешки.zip" -d smart-home-max
    cd smart-home-max
    ```
 
@@ -41,7 +41,15 @@
 
 Миграции и создание первого supervisor выполняются одноразовыми сервисами. Демонстрационный seed в production-конфигурацию не входит.
 
-После запуска откройте `https://APP_DOMAIN` и войдите с `ADMIN_SEED_USERNAME` / `ADMIN_SEED_PASSWORD`. Сразу смените пароль администратора в настройках, если он был передан третьему лицу.
+Паролей по умолчанию нет. Администратор платформы (его MAX user_id указан в `PLATFORM_ADMIN_MAX_USER_IDS`) один раз открывает мини-приложение из MAX, затем входит на `https://APP_DOMAIN` по кнопке «Веб-админка платформы» в боте. Чтобы входить и по логину с паролем, задайте их в разделе «Учётная запись» или командой:
+
+```bash
+docker compose --env-file .env.production -f compose.yaml -f compose.production.yaml exec -T \
+  -e ADMIN_MAX_USER_ID=<MAX user_id> -e ADMIN_LOGIN=admin -e ADMIN_PASSWORD='<не короче 10 символов>' \
+  backend sh -c 'cd apps/backend && node_modules/.bin/tsx prisma/set-admin-password.ts'
+```
+
+Сотрудники УК входят без пароля: кнопка «Веб-диспетчерская УК» в боте присылает одноразовую ссылку на 5 минут.
 
 ## Подключение MAX webhook
 
@@ -58,7 +66,7 @@ docker compose --env-file .env.production -f compose.yaml -f compose.production.
 
 ```bash
 SMOKE_BASE_URL=https://example.ru \
-SMOKE_ADMIN_USERNAME=dispatcher \
+SMOKE_ADMIN_USERNAME=admin \
 SMOKE_ADMIN_PASSWORD='...' \
 pnpm smoke:production
 ```

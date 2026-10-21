@@ -17,8 +17,14 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed-extra": "tsx prisma/seed-extra.ts",
+    "db:seed-real": "tsx prisma/seed-real.ts",
+    "db:default-codes": "tsx prisma/default-codes.ts",
+    "db:company-demo": "tsx prisma/seed-company-demo.ts",
+    "registry:import": "tsx src/registry/import.ts",
     "max:check": "tsx src/max-cli.ts check",
-    "max:subscribe": "tsx src/max-cli.ts subscribe"
+    "max:subscribe": "tsx src/max-cli.ts subscribe",
+    "max:unsubscribe": "tsx src/max-cli.ts unsubscribe"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",

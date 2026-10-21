@@ -35,6 +35,9 @@ enum IncidentPriority {
 enum AdminRole {
   dispatcher
   supervisor
+  // Runs the platform itself: connects management companies and puts them on
+  // the map. Not bound to any company.
+  platform_admin
 }
 
 enum OutboxStatus {
@@ -52,7 +55,21 @@ enum PhoneVisibility {
 model User {
   id            String                 @id @default(uuid()) @db.Uuid
   maxUserId     String                 @unique @map("max_user_id")
+  // When the resident last looked at their incidents: newer updates are unread.
+  incidentsSeenAt DateTime?            @map("incidents_seen_at") @db.Timestamptz(3)
+  // When the resident agreed to the processing of personal data (152-ФЗ).
+  consentAt     DateTime?              @map("consent_at") @db.Timestamptz(3)
+  announcementReads AnnouncementRead[]
   displayName   String?                @map("display_name")
+  // Public nick from the MAX profile, if the resident has one.
+  maxUsername   String?                @map("max_username")
+  // Phone shared by the resident with the "share contact" button in MAX.
+  sharedPhone   String?                @map("shared_phone")
+  phoneSharedAt DateTime?              @map("phone_shared_at") @db.Timestamptz(3)
+  // The bot message the resident currently interacts with. Pressing its
+  // buttons edits it in place, so the chat keeps one live screen.
+  screenMessageId String?              @map("screen_message_id")
+  screenHasMedia  Boolean              @default(false) @map("screen_has_media")
   createdAt     DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
   deletedAt     DateTime?              @map("deleted_at") @db.Timestamptz(3)
   memberships   ResidentMembership[]
@@ -65,6 +82,11 @@ model User {
   incidentPhotos IncidentPhoto[]
   incidentComments IncidentComment[]
   apartmentLeaves ApartmentLeave[]
+  joinRequests  ApartmentJoinRequest[] @relation("JoinRequester")
+  joinDecisions ApartmentJoinRequest[] @relation("JoinDecider")
+  codeAttempts  CodeAttempt[]
+  pollVotes     PollVote[]
+  appointments  Appointment[]
 
   @@map("users")
 }
@@ -81,35 +103,160 @@ model ApartmentLeave {
 
 model Building {
   id             String      @id @default(uuid()) @db.Uuid
+  // Display form "street, house", kept in sync with street and house.
   address        String
+  // City of the house: the bot asks the city first, then the street in it.
+  city           String?
+  street         String
+  house          String
   entrancesCount Int         @default(3) @map("entrances_count")
   apartmentsCount Int        @default(100) @map("apartments_count")
   chatLink        String?    @map("chat_link")
+  companyId       String     @map("company_id") @db.Uuid
+  // Point of the house on the map in the mini-app. A building without a point
+  // still works in the bot, it is just not drawn on the map.
+  latitude        Float?
+  longitude       Float?
+  // From the open housing registry when the house was found there.
+  fiasGuid        String?    @map("fias_guid")
+  floors          Int?
+  builtYear       Int?       @map("built_year")
+  // Ten-digit code that residents receive from the management company. It is
+  // shown to supervisors so it can be printed and handed out, hence plaintext.
+  accessCode     String      @map("access_code")
   createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   apartments     Apartment[]
   incidents      Incident[]
+  announcements  Announcement[]
+  polls          Poll[]
+  company        ManagementCompany @relation(fields: [companyId], references: [id], onDelete: Restrict)
 
+  @@index([street])
+  @@index([city])
+  @@index([companyId])
   @@map("buildings")
 }
 
 model EmergencyService {
   id          String   @id @default(uuid()) @db.Uuid
+  // Null for city-wide numbers kept by the platform; otherwise a number added
+  // by one company for its own residents.
+  companyId   String?  @map("company_id") @db.Uuid
   name        String
   phone       String
   description String
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  company     ManagementCompany? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   @@index([createdAt])
   @@map("emergency_services")
 }
 
-model UkAccessCode {
-  id        String   @id @default("main")
-  code      String
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+// A management company (УК). Every building, dispatcher and announcement
+// belongs to exactly one of them; their data never mixes.
+model ManagementCompany {
+  id           String         @id @default(uuid()) @db.Uuid
+  name         String
+  inn          String?
+  ogrn         String?
+  site         String?
+  phone        String
+  email        String?
+  address      String?
+  workingHours String?        @map("working_hours")
+  // Hours when residents are received in the office, and the days off.
+  receptionHours String?      @map("reception_hours")
+  daysOff      String?        @map("days_off")
+  // Cleaning and upkeep of the house and the yard, shown to residents.
+  cleaningInfo String?        @default("УК обязана мыть подъезды, подметать двор, вывозить снег зимой и косить траву летом по установленному графику.") @map("cleaning_info")
+  // The company's own text of its duties; null means the platform's.
+  duties       Json?
+  // The quick dial numbers residents see; null means the default list.
+  quickDial    Json?          @map("quick_dial")
+  note         String?
+  // Office of the company on the map.
+  latitude     Float?
+  longitude    Float?
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  buildings    Building[]
+  admins       Admin[]
+  announcements Announcement[]
+  invites      AdminInvite[]
+  emergencyServices EmergencyService[]
+  polls             Poll[]
+  appointments      Appointment[]
 
-  @@map("uk_access_codes")
+  @@map("management_companies")
+}
+
+// A one-time link that turns the MAX user who opens it into an administrator
+// of a company. Only the hash of the token is stored.
+model AdminInvite {
+  id               String            @id @default(uuid()) @db.Uuid
+  tokenHash        String            @unique @map("token_hash")
+  companyId        String            @map("company_id") @db.Uuid
+  role             AdminRole
+  createdByAdminId String            @map("created_by_admin_id") @db.Uuid
+  expiresAt        DateTime          @map("expires_at") @db.Timestamptz(3)
+  usedAt           DateTime?         @map("used_at") @db.Timestamptz(3)
+  usedByAdminId    String?           @map("used_by_admin_id") @db.Uuid
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  company          ManagementCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy        Admin             @relation("InviteCreator", fields: [createdByAdminId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@map("admin_invites")
+}
+
+// Wrong building or apartment codes typed in the mini-app. Used to slow down
+// guessing; old rows are removed by the worker.
+model CodeAttempt {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("code_attempts")
+}
+
+// An announcement a resident marked as read (or opened).
+model AnnouncementRead {
+  userId         String       @map("user_id") @db.Uuid
+  announcementId String       @map("announcement_id") @db.Uuid
+  readAt         DateTime     @default(now()) @map("read_at") @db.Timestamptz(3)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@id([userId, announcementId])
+  @@map("announcement_reads")
+}
+
+model Announcement {
+  id              String     @id @default(uuid()) @db.Uuid
+  reads           AnnouncementRead[]
+  audience        String
+  street          String?
+  buildingId      String?    @map("building_id") @db.Uuid
+  apartmentId     String?    @map("apartment_id") @db.Uuid
+  text            String
+  recipientsCount Int        @map("recipients_count")
+  companyId       String     @map("company_id") @db.Uuid
+  adminId         String     @map("admin_id") @db.Uuid
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  building        Building?  @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  apartment       Apartment? @relation(fields: [apartmentId], references: [id], onDelete: Cascade)
+  admin           Admin      @relation(fields: [adminId], references: [id], onDelete: Restrict)
+  company         ManagementCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([companyId, createdAt(sort: Desc)])
+  @@index([buildingId, createdAt(sort: Desc)])
+  @@index([apartmentId, createdAt(sort: Desc)])
+  @@map("announcements")
 }
 
 model Apartment {
@@ -117,12 +264,19 @@ model Apartment {
   buildingId     String                 @map("building_id") @db.Uuid
   number         String
   inviteCodeHash String?                @map("invite_code_hash")
+  // Number of the management contract (personal account) of the apartment:
+  // another way to prove the apartment, given by the company.
+  contractNumber String                 @default("0000000000") @map("contract_number")
   building       Building               @relation(fields: [buildingId], references: [id], onDelete: Restrict)
   memberships    ResidentMembership[]
   reports        Report[]
   profile        ResidentProfile?
   vehicles       Vehicle[]
   incidentComments IncidentComment[]
+  announcements  Announcement[]
+  joinRequests   ApartmentJoinRequest[]
+  pollVotes      PollVote[]
+  appointments   Appointment[]
 
   @@unique([buildingId, number])
   @@map("apartments")
@@ -145,12 +299,22 @@ model Admin {
   id           String          @id @default(uuid()) @db.Uuid
   username     String          @unique
   passwordHash String          @map("password_hash")
-  role         AdminRole       @default(dispatcher)
+  role         AdminRole       @default(supervisor)
+  // Null only for platform administrators.
+  companyId    String?         @map("company_id") @db.Uuid
+  // MAX account that opens the mini-app as this administrator.
+  maxUserId    String?         @unique @map("max_user_id")
+  displayName  String?         @map("display_name")
   createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  company      ManagementCompany? @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  invitesCreated AdminInvite[] @relation("InviteCreator")
   incidents    Incident[]
   events       IncidentEvent[]
   sessions     AdminSession[]
+  loginLinks   AdminLoginLink[]
   auditEvents  AdminAuditEvent[]
+  announcements Announcement[]
+  joinDecisions ApartmentJoinRequest[]
 
   @@map("admins")
 }
@@ -170,6 +334,21 @@ model AdminAuditEvent {
   @@map("admin_audit_events")
 }
 
+// A one-time link from the mini-app to the web desk: the employee is already
+// known by MAX, so the web desk opens without a password.
+model AdminLoginLink {
+  id        String    @id @default(uuid()) @db.Uuid
+  adminId   String    @map("admin_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  admin     Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@map("admin_login_links")
+}
+
 model AdminSession {
   id        String   @id @default(uuid()) @db.Uuid
   adminId   String   @map("admin_id") @db.Uuid
@@ -184,6 +363,9 @@ model AdminSession {
 
 model Incident {
   id              String                 @id @default(uuid()) @db.Uuid
+  // Public sequential number shown to residents and dispatchers. Unlike a
+  // prefix of the UUID it can never repeat.
+  number          Int                    @unique @default(autoincrement())
   buildingId      String                 @map("building_id") @db.Uuid
   category        IncidentCategory
   locationZone    String                 @map("location_zone")
@@ -197,7 +379,12 @@ model Incident {
   delayReason     String?                @map("delay_reason")
   rejectionReason String?                @map("rejection_reason")
   archivedAt      DateTime?              @map("archived_at") @db.Timestamptz(3)
+  // Reminders of the legal term sent to the company, once each.
+  legalSoonNotifiedAt DateTime?          @map("legal_soon_notified_at") @db.Timestamptz(3)
+  legalLateNotifiedAt DateTime?          @map("legal_late_notified_at") @db.Timestamptz(3)
   resolvedAt      DateTime?              @map("resolved_at") @db.Timestamptz(3)
+  // First time the company reacted (took the incident out of "new").
+  acknowledgedAt  DateTime?              @map("acknowledged_at") @db.Timestamptz(3)
   version         Int                    @default(1)
   createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -371,4 +558,160 @@ model OutboxMessage {
 
   @@index([status, nextAttemptAt])
   @@map("outbox_messages")
+}
+
+enum JoinRequestStatus {
+  pending
+  approved
+  rejected
+  cancelled
+}
+
+// A resident asking to join an apartment where other residents are already
+// connected. One of them, or a dispatcher, approves or rejects it.
+model ApartmentJoinRequest {
+  id               String            @id @default(uuid()) @db.Uuid
+  apartmentId      String            @map("apartment_id") @db.Uuid
+  userId           String            @map("user_id") @db.Uuid
+  status           JoinRequestStatus @default(pending)
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  decidedAt        DateTime?         @map("decided_at") @db.Timestamptz(3)
+  decidedByUserId  String?           @map("decided_by_user_id") @db.Uuid
+  decidedByAdminId String?           @map("decided_by_admin_id") @db.Uuid
+  apartment        Apartment         @relation(fields: [apartmentId], references: [id], onDelete: Cascade)
+  user             User              @relation("JoinRequester", fields: [userId], references: [id], onDelete: Cascade)
+  decidedByUser    User?             @relation("JoinDecider", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  decidedByAdmin   Admin?            @relation(fields: [decidedByAdminId], references: [id], onDelete: SetNull)
+
+  @@index([apartmentId, status])
+  @@index([userId, status])
+  @@map("apartment_join_requests")
+}
+
+// Open data of the Territory Development Fund ("Реформа ЖКХ"), loaded by
+// `registry:import`. Used to fill in a house or a company found on the map;
+// nothing here is shown as a fact without the person confirming it.
+model RegistryCompany {
+  id            String  @id
+  subject       String
+  nameFull      String  @map("name_full")
+  nameShort     String? @map("name_short")
+  inn           String?
+  ogrn          String?
+  legalAddress  String? @map("legal_address")
+  actualAddress String? @map("actual_address")
+  phone         String?
+  email         String?
+  site          String?
+  housesCount   Int?    @map("houses_count")
+
+  @@index([inn])
+  @@index([subject])
+  @@map("registry_companies")
+}
+
+model RegistryHouse {
+  id          String  @id
+  subject     String
+  fiasGuid    String? @map("fias_guid")
+  address     String
+  locality    String?
+  streetKey   String  @map("street_key")
+  houseKey    String  @map("house_key")
+  builtYear   Int?    @map("built_year")
+  floors      Int?
+  apartments  Int?
+  residents   Int?
+  totalArea   Float?  @map("total_area")
+
+  @@index([streetKey, houseKey])
+  @@map("registry_houses")
+}
+
+// Settings of the whole platform, such as the default text of the duties of
+// management companies.
+model PlatformSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("platform_settings")
+}
+
+// A poll of a company: for all its houses or for one. One vote per
+// apartment; in an anonymous poll residents see only the numbers, the company
+// sees which apartment chose what in any poll.
+model Poll {
+  id          String    @id @default(uuid()) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  // Null: all houses of the company.
+  buildingId  String?   @map("building_id") @db.Uuid
+  question    String
+  // [{ id, text }], from 2 to 15 options.
+  options     Json
+  anonymous   Boolean   @default(false)
+  allowChange Boolean   @default(true) @map("allow_change")
+  endsAt      DateTime  @map("ends_at") @db.Timestamptz(3)
+  closedAt    DateTime? @map("closed_at") @db.Timestamptz(3)
+  createdById String?   @map("created_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  company     ManagementCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  building    Building?         @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  votes       PollVote[]
+
+  @@index([companyId, endsAt])
+  @@map("polls")
+}
+
+model PollVote {
+  id          String   @id @default(uuid()) @db.Uuid
+  pollId      String   @map("poll_id") @db.Uuid
+  apartmentId String   @map("apartment_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  optionId    String   @map("option_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  poll        Poll      @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  apartment   Apartment @relation(fields: [apartmentId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, apartmentId])
+  @@map("poll_votes")
+}
+
+// A window of the reception of citizens. The company opens windows; a
+// resident takes a free one with the topic of the visit.
+model Appointment {
+  id              String    @id @default(uuid()) @db.Uuid
+  companyId       String    @map("company_id") @db.Uuid
+  startsAt        DateTime  @map("starts_at") @db.Timestamptz(3)
+  durationMinutes Int       @default(15) @map("duration_minutes")
+  userId          String?   @map("user_id") @db.Uuid
+  apartmentId     String?   @map("apartment_id") @db.Uuid
+  topic           String?
+  bookedAt        DateTime? @map("booked_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  company         ManagementCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user            User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  apartment       Apartment?        @relation(fields: [apartmentId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, startsAt])
+  @@index([userId])
+  @@map("appointments")
+}
+
+// Failed sign-ins by address: five within a quarter of an hour block the
+// address for five minutes. Kept in the database, so a restart does not
+// reset it and an old failure does not count forever.
+model AdminLoginFailure {
+  key          String    @id
+  count        Int       @default(0)
+  firstAt      DateTime  @default(now()) @map("first_at") @db.Timestamptz(3)
+  blockedUntil DateTime? @map("blocked_until") @db.Timestamptz(3)
+
+  @@index([firstAt])
+  @@map("admin_login_failures")
 }

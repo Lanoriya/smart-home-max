@@ -3,6 +3,9 @@ import type { AdminRole } from '@prisma/client';
 import type { NextFunction, Request, Response } from 'express';
 import { env } from '../config/env.js';
 import { prisma } from '../shared/prisma.js';
+import { actingCompanyId } from './scope.js';
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const adminCookieName = 'smart_home_admin';
 
@@ -51,7 +54,7 @@ export async function getAuthenticatedAdmin(request: Request) {
   if (!token) return null;
   return prisma.adminSession.findFirst({
     where: { tokenHash: hashSessionToken(token), expiresAt: { gt: new Date() } },
-    include: { admin: true },
+    include: { admin: { include: { company: { select: { id: true, name: true } } } } },
   });
 }
 
@@ -63,6 +66,10 @@ export async function requireAdmin(request: Request, response: Response, next: N
       return;
     }
     response.locals.admin = session.admin;
+    // A platform administrator may act for one company by naming it in the
+    // X-Company-Id header; a company administrator is always bound to their own.
+    const requested = request.header('x-company-id');
+    response.locals.companyId = actingCompanyId(session.admin, requested && uuidPattern.test(requested) ? requested : null);
     next();
   } catch (error) {
     next(error);
@@ -72,7 +79,8 @@ export async function requireAdmin(request: Request, response: Response, next: N
 export function requireRole(...roles: AdminRole[]) {
   return (_request: Request, response: Response, next: NextFunction) => {
     const admin = response.locals.admin as { role?: AdminRole } | undefined;
-    if (!admin || !admin.role || !roles.includes(admin.role)) {
+    // The platform administrator can do everything a supervisor can.
+    if (!admin || !admin.role || (!roles.includes(admin.role) && admin.role !== 'platform_admin')) {
       response.status(403).json({ code: 'insufficient_permissions' });
       return;
     }

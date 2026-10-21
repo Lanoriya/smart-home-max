@@ -10,11 +10,16 @@ import { healthRouter } from './routes/health.js';
 import { incidentsRouter } from './routes/incidents.js';
 import { maxWebhookRouter } from './routes/max-webhook.js';
 import { adminSessionRouter } from './routes/admin-session.js';
+import { photosRouter } from './routes/photos.js';
 import { buildingsRouter } from './routes/buildings.js';
 import { announcementsRouter } from './routes/announcements.js';
 import { emergencyServicesRouter } from './routes/emergency-services.js';
 import { apartmentsRouter } from './routes/apartments.js';
 import { settingsRouter } from './routes/settings.js';
+import { joinRequestsRouter } from './routes/join-requests.js';
+import { miniAppRouter } from './miniapp/router.js';
+import { CompanyRequiredError } from './auth/scope.js';
+import { privacyRouter } from './routes/privacy.js';
 
 export function createApp() {
   const app = express();
@@ -28,7 +33,8 @@ export function createApp() {
       credentials: true,
     }),
   );
-  app.use(express.json({ limit: '1mb' }));
+  // Up to three photos of a problem come from the mini-app in one request.
+  app.use(express.json({ limit: '3mb' }));
   app.use(
     pinoHttp({
       logger,
@@ -42,6 +48,8 @@ export function createApp() {
 
   app.use('/health', healthRouter);
   app.use('/webhooks/max', maxWebhookRouter);
+  app.use('/api/photos', photosRouter);
+  app.use('/api/privacy', privacyRouter);
   app.use('/api/admin/session', adminSessionRouter);
   app.use('/api/incidents', incidentsRouter);
   app.use('/api/buildings', buildingsRouter);
@@ -49,6 +57,8 @@ export function createApp() {
   app.use('/api/emergency-services', emergencyServicesRouter);
   app.use('/api/apartments', apartmentsRouter);
   app.use('/api/settings', settingsRouter);
+  app.use('/api/join-requests', joinRequestsRouter);
+  app.use('/api/app', miniAppRouter);
 
   app.use((_request, response) => {
     response.status(404).json({ code: 'not_found' });
@@ -58,6 +68,10 @@ export function createApp() {
   // though the error is handled here, otherwise thrown async route errors can
   // escape as a framework default response.
   app.use((error: unknown, request: express.Request, response: express.Response, _next: express.NextFunction) => {
+    if (error instanceof CompanyRequiredError && !response.headersSent) {
+      response.status(400).json({ code: 'company_required' });
+      return;
+    }
     request.log.error({ error }, 'Unhandled request error');
     if (response.headersSent) return;
     response.status(500).json({

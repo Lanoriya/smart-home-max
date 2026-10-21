@@ -10,7 +10,7 @@ RUN pnpm --filter @smart-home/backend build
 FROM node:22.23.2-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-RUN addgroup -S app && adduser -S app -G app
+RUN addgroup -S app && adduser -S app -G app && mkdir -p /data/photos && chown app:app /data/photos
 COPY --chown=app:app --from=builder /app/package.json /app/pnpm-workspace.yaml ./
 COPY --chown=app:app --from=builder /app/node_modules ./node_modules
 COPY --chown=app:app --from=builder /app/apps/backend/node_modules ./apps/backend/node_modules

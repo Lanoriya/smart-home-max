@@ -1,15 +1,21 @@
 import { PrismaClient } from '@prisma/client';
-import { randomBytes, scrypt as scryptCallback } from 'node:crypto';
-import { promisify } from 'node:util';
 
 const prisma = new PrismaClient();
-const scrypt = promisify(scryptCallback);
 
 type DemoResident = { userId: string; apartmentId: string; apartmentNumber: string; fullName: string };
 
+// Test management companies. The names, phones and map points are made up;
+// the points are spread over a district of Yekaterinburg only so that the map
+// of the mini-app has something to show.
+export const demoCompanies = [
+  { id: 'c0000000-0000-4000-8000-000000000001', name: 'Тестовая УК «Северная»', phone: '+7 (900) 000-00-00', email: 'uk-north@example.invalid', address: 'Тестовый адрес офиса, 1', workingHours: 'Пн–Пт 9:00–18:00, обед 13:00–14:00', note: 'Демонстрационные данные.', latitude: 56.8462, longitude: 60.6265 },
+  { id: 'c0000000-0000-4000-8000-000000000002', name: 'Тестовая УК «Речная»', phone: '+7 (900) 000-00-10', email: 'uk-river@example.invalid', address: 'Тестовый адрес офиса, 2', workingHours: 'Пн–Пт 8:00–17:00', note: 'Демонстрационные данные.', latitude: 56.8338, longitude: 60.5994 },
+  { id: 'c0000000-0000-4000-8000-000000000003', name: 'Тестовое ТСЖ «Мира»', phone: '+7 (900) 000-00-20', email: null, address: 'Тестовый адрес правления, 3', workingHours: 'Вт и Чт 18:00–20:00', note: 'Демонстрационные данные.', latitude: 56.8423, longitude: 60.6531 },
+] as const;
+
 const demoBuildings = [
-  { id: 'd1000000-0000-4000-8000-000000000001', prefix: 'd2000000', address: 'Тестовый №1 Улица демонстрации 10', entrancesCount: 3, apartmentsCount: 100, chatLink: 'https://example.invalid/demo-house-1' },
-  { id: 'd1100000-0000-4000-8000-000000000002', prefix: 'd2100000', address: 'Тестовый №2 Улица демонстрации 13', entrancesCount: 4, apartmentsCount: 80, chatLink: 'https://example.invalid/demo-house-2' },
+  { id: 'd1000000-0000-4000-8000-000000000001', prefix: 'd2000000', companyId: demoCompanies[0].id, latitude: 56.8481, longitude: 60.6211, address: 'Тестовый №1 Улица демонстрации, 10', street: 'Тестовый №1 Улица демонстрации', house: '10', entrancesCount: 3, apartmentsCount: 100, chatLink: 'https://max.ru/join/demo-house-1', accessCode: '1000000001' },
+  { id: 'd1100000-0000-4000-8000-000000000002', prefix: 'd2100000', companyId: demoCompanies[0].id, latitude: 56.8447, longitude: 60.6302, address: 'Тестовый №2 Улица демонстрации, 13', street: 'Тестовый №2 Улица демонстрации', house: '13', entrancesCount: 4, apartmentsCount: 80, chatLink: 'https://max.ru/join/demo-house-2', accessCode: '1000000002' },
 ] as const;
 
 const legacyDemoIncidentIds = [
@@ -32,12 +38,6 @@ function residentName(building: number, apartment: number, resident: number) {
   return `${lastNames[index]} ${firstNames[index]}`;
 }
 
-async function hashAdminPassword(password: string) {
-  const salt = randomBytes(16).toString('hex');
-  const derived = await scrypt(password, salt, 64) as Buffer;
-  return `scrypt$${salt}$${derived.toString('hex')}`;
-}
-
 async function seedApartments() {
   const residents = new Map<string, DemoResident[]>();
   for (const [buildingIndex, config] of demoBuildings.entries()) {
@@ -45,8 +45,9 @@ async function seedApartments() {
     const { prefix, ...buildingData } = config;
     const building = await prisma.building.upsert({
       where: { id: config.id },
-      update: { address: config.address, entrancesCount: config.entrancesCount, apartmentsCount: config.apartmentsCount, chatLink: config.chatLink },
-      create: buildingData,
+      update: { address: config.address, city: 'Екатеринбург', street: config.street, house: config.house, entrancesCount: config.entrancesCount, apartmentsCount: config.apartmentsCount, chatLink: config.chatLink, accessCode: config.accessCode, companyId: config.companyId, latitude: config.latitude, longitude: config.longitude },
+      // The demo houses stand in Yekaterinburg.
+      create: { ...buildingData, city: 'Екатеринбург' },
     });
     await prisma.apartment.createMany({
       data: Array.from({ length: config.apartmentsCount }, (_, index) => ({ id: fixedId(prefix, index + 1), buildingId: building.id, number: String(index + 1) })),
@@ -111,10 +112,13 @@ async function seedIncident(id: string, buildingId: string, data: DemoIncident) 
   await prisma.$transaction(async (tx) => {
     const archivedAt = data.archived ? new Date('2026-09-28T17:00:00.000Z') : null;
     const resolvedAt = data.status === 'resolved' ? new Date('2026-09-28T17:00:00.000Z') : null;
+    // Fixed demo history: reported in the morning, the company reacted in 70 minutes.
+    const createdAt = new Date('2026-09-28T08:30:00.000Z');
+    const acknowledgedAt = data.status === 'new' ? null : new Date('2026-09-28T09:40:00.000Z');
     const incident = await tx.incident.upsert({
       where: { id },
-      update: { category: data.category, locationZone: data.locationZone, entranceNumber: data.entranceNumber ?? null, apartmentNumber: data.apartmentNumber ?? null, title: data.title, status: data.status, priority: data.priority, archivedAt, resolvedAt },
-      create: { id, buildingId, category: data.category, locationZone: data.locationZone, entranceNumber: data.entranceNumber, apartmentNumber: data.apartmentNumber, title: data.title, status: data.status, priority: data.priority, archivedAt: archivedAt ?? undefined, resolvedAt: resolvedAt ?? undefined },
+      update: { category: data.category, locationZone: data.locationZone, entranceNumber: data.entranceNumber ?? null, apartmentNumber: data.apartmentNumber ?? null, title: data.title, status: data.status, priority: data.priority, archivedAt, resolvedAt, acknowledgedAt, createdAt },
+      create: { id, buildingId, category: data.category, locationZone: data.locationZone, entranceNumber: data.entranceNumber, apartmentNumber: data.apartmentNumber, title: data.title, status: data.status, priority: data.priority, archivedAt: archivedAt ?? undefined, resolvedAt: resolvedAt ?? undefined, acknowledgedAt: acknowledgedAt ?? undefined, createdAt },
     });
     await tx.incidentComment.deleteMany({ where: { incidentId: incident.id } });
     await tx.incidentEvent.deleteMany({ where: { incidentId: incident.id } });
@@ -181,11 +185,12 @@ async function seedEmergencyServices() {
   for (const [id, name, phone, description] of services) await prisma.emergencyService.upsert({ where: { id }, update: { name, phone, description }, create: { id, name, phone, description } });
 }
 
+async function seedCompanies() {
+  for (const { id, ...company } of demoCompanies) await prisma.managementCompany.upsert({ where: { id }, update: company, create: { id, ...company } });
+}
+
 async function main() {
-  const username = process.env.ADMIN_SEED_USERNAME ?? 'dispatcher';
-  const password = process.env.ADMIN_SEED_PASSWORD ?? 'change-this-demo-password';
-  const passwordHash = await hashAdminPassword(password);
-  await prisma.admin.upsert({ where: { username }, update: {}, create: { username, passwordHash, role: 'supervisor' } });
+  await seedCompanies();
   const residents = await seedApartments();
   await seedIncidents(residents);
   await seedEmergencyServices();

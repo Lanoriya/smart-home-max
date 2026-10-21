@@ -17,6 +17,7 @@
     "db:seed": "pnpm --filter @smart-home/backend db:seed",
     "max:check": "pnpm --filter @smart-home/backend max:check",
     "max:subscribe": "pnpm --filter @smart-home/backend max:subscribe",
+    "max:unsubscribe": "pnpm --filter @smart-home/backend max:unsubscribe",
     "smoke:production": "node scripts/smoke-production.mjs"
   }
 }

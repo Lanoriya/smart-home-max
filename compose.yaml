@@ -41,27 +41,19 @@ services:
       MAX_WEBHOOK_SECRET: ${MAX_WEBHOOK_SECRET:-change-me-webhook-secret}
       MAX_PUBLIC_WEBHOOK_URL: ${MAX_PUBLIC_WEBHOOK_URL:-}
       APARTMENT_CODE_PEPPER: ${APARTMENT_CODE_PEPPER:-change-me-apartment-code-pepper}
-      ADMIN_SEED_USERNAME: ${ADMIN_SEED_USERNAME:-dispatcher}
-      ADMIN_SEED_PASSWORD: ${ADMIN_SEED_PASSWORD:-change-this-demo-password}
       ADMIN_SESSION_TTL_HOURS: ${ADMIN_SESSION_TTL_HOURS:-12}
       ADMIN_COOKIE_SECURE: ${ADMIN_COOKIE_SECURE:-false}
       ADMIN_WEB_ORIGIN: ${ADMIN_WEB_ORIGIN:-http://localhost:8080}
-      RESIDENT_UK_CODE: ${RESIDENT_UK_CODE:-0000000000}
       TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
+      MAX_BOT_USERNAME: ${MAX_BOT_USERNAME:-}
+      PLATFORM_ADMIN_MAX_USER_IDS: ${PLATFORM_ADMIN_MAX_USER_IDS:-}
+      MINIAPP_DEV_AUTH: ${MINIAPP_DEV_AUTH:-false}
+      MINIAPP_URL: ${MINIAPP_URL:-}
+      MINIAPP_OPEN_MODE: ${MINIAPP_OPEN_MODE:-open_app}
+      PHOTOS_DIR: /data/photos
     depends_on:
       db:
         condition: service_healthy
-    restart: "no"
-    logging: *default-logging
-
-  bootstrap-admin:
-    image: smart-home-max-backend
-    build: *backend-build
-    command: ["node", "apps/backend/dist/bootstrap-admin.js"]
-    environment: *backend-environment
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
     restart: "no"
     logging: *default-logging
 
@@ -72,8 +64,10 @@ services:
     environment:
       <<: *backend-environment
       PORT: 3000
+    volumes:
+      - photos_data:/data/photos
     depends_on:
-      bootstrap-admin:
+      migrate:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
@@ -88,8 +82,10 @@ services:
     build: *backend-build
     command: ["node", "apps/backend/dist/worker.js"]
     environment: *backend-environment
+    volumes:
+      - photos_data:/data/photos
     depends_on:
-      bootstrap-admin:
+      migrate:
         condition: service_completed_successfully
     restart: unless-stopped
     logging: *default-logging
@@ -102,9 +98,11 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${ADMIN_WEB_PORT:-8080}:8080"
     restart: unless-stopped
     logging: *default-logging
 
 volumes:
   postgres_data:
+  # Photos sent from the mini-app; back it up together with the database.
+  photos_data:
