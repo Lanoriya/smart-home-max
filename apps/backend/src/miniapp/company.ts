@@ -5,7 +5,7 @@ import { writeAdminAudit } from '../auth/admin-audit.js';
 import { buildingWhere, requireCompanyId, viaApartment } from '../auth/scope.js';
 import { buildingSchema, createBuilding, isUsableLink } from '../buildings/building-service.js';
 import { compareBuildings } from '../buildings/address.js';
-import { announcementSchema, queueAnnouncement } from '../announcements/announcement-service.js';
+import { announcementHistorySchema, announcementSchema, companyAnnouncements, deleteAnnouncement, queueAnnouncement, setAnnouncementArchived } from '../announcements/announcement-service.js';
 import { getIncident, listFiltersSchema, listIncidents, patchIncidentSchema, updateIncident } from '../incidents/admin-incidents.js';
 import { activeRequestsSince, decideJoinRequest, requesterName } from '../residents/join-requests.js';
 import { formatRussianPhone, normalizeRussianPhone } from '../shared/phone.js';
@@ -154,6 +154,32 @@ companyRouter.post('/announcements', async (request, response, next) => {
     const result = await queueAnnouncement(admin(response), companyOf(response), parsed.data);
     if (!result.ok) { response.status(404).json({ code: result.code }); return; }
     response.status(202).json({ recipientsCount: result.recipientsCount });
+  } catch (error) { next(error); }
+});
+
+companyRouter.get('/announcements', async (request, response, next) => {
+  try {
+    const parsed = announcementHistorySchema.safeParse(request.query);
+    if (!parsed.success) { response.status(400).json({ code: 'invalid_announcement_query' }); return; }
+    response.json(await companyAnnouncements(companyOf(response), parsed.data.archived === 'true', parsed.data.page));
+  } catch (error) { next(error); }
+});
+
+for (const [action, archived] of [['archive', true], ['restore', false]] as const) {
+  companyRouter.post(`/announcements/:id/${action}`, async (request, response, next) => {
+    try {
+      if (!z.string().uuid().safeParse(request.params.id).success) { response.status(404).json({ code: 'announcement_not_found' }); return; }
+      if (!await setAnnouncementArchived(admin(response).id, companyOf(response), String(request.params.id), archived)) { response.status(404).json({ code: 'announcement_not_found' }); return; }
+      response.status(204).end();
+    } catch (error) { next(error); }
+  });
+}
+
+companyRouter.delete('/announcements/:id', async (request, response, next) => {
+  try {
+    if (!z.string().uuid().safeParse(request.params.id).success) { response.status(404).json({ code: 'announcement_not_found' }); return; }
+    if (!await deleteAnnouncement(admin(response).id, companyOf(response), String(request.params.id))) { response.status(404).json({ code: 'announcement_not_found' }); return; }
+    response.status(204).end();
   } catch (error) { next(error); }
 });
 

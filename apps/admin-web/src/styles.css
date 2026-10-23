@@ -454,12 +454,14 @@ label, .toolbar-field, .picker { min-width: 0; }
   --glass-rim: rgba(255, 255, 255, 0.9);
   --glass-shadow: 0 10px 30px rgba(10, 40, 100, 0.08), 0 1px 2px rgba(10, 40, 100, 0.05);
   --page-glow: radial-gradient(70vmax 50vmax at 100% -5%, rgba(0, 119, 255, 0.18), transparent 60%), radial-gradient(60vmax 45vmax at -10% 50%, rgba(110, 160, 255, 0.14), transparent 60%), #ebedf0;
+  --page-base: #ebedf0;
 }
 :root[data-theme='dark'] {
   --glass-fill: linear-gradient(145deg, rgba(48, 52, 64, 0.62), rgba(26, 28, 36, 0.5));
   --glass-rim: rgba(255, 255, 255, 0.1);
   --glass-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
   --page-glow: radial-gradient(70vmax 50vmax at 100% -5%, rgba(0, 119, 255, 0.24), transparent 60%), radial-gradient(60vmax 45vmax at -10% 50%, rgba(90, 80, 255, 0.14), transparent 60%), #0b0c10;
+  --page-base: #0b0c10;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
@@ -467,16 +469,26 @@ label, .toolbar-field, .picker { min-width: 0; }
     --glass-rim: rgba(255, 255, 255, 0.1);
     --glass-shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
     --page-glow: radial-gradient(70vmax 50vmax at 100% -5%, rgba(0, 119, 255, 0.24), transparent 60%), radial-gradient(60vmax 45vmax at -10% 50%, rgba(90, 80, 255, 0.14), transparent 60%), #0b0c10;
+    --page-base: #0b0c10;
   }
 }
-body { background: var(--page-glow); background-attachment: fixed; }
+/* The glow is a fixed layer of its own: the browser paints it once instead
+   of repainting the page on every frame of scrolling, as a fixed background
+   of the body makes it do. */
+body { background: var(--page-base); }
+body::before { content: ''; position: fixed; inset: 0; z-index: -1; background: var(--page-glow); pointer-events: none; }
+/* Panels that scroll get no backdrop blur: behind them is only the smooth
+   glow, which looks the same unblurred, while blurring it again on every
+   frame of scrolling made the page stutter. Panels that stay in place keep it. */
 .panel, .stats, .login-card, .status-form, .help-section, .help-toc {
   background: var(--glass-fill);
-  -webkit-backdrop-filter: blur(24px) saturate(1.8);
-  backdrop-filter: blur(24px) saturate(1.8);
   border: 1px solid var(--glass-rim);
   border-radius: 16px;
   box-shadow: var(--glass-shadow), inset 0 1px 1px var(--glass-rim);
+}
+.login-card, .help-toc {
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+  backdrop-filter: blur(24px) saturate(1.8);
 }
 .sidebar {
   background: linear-gradient(180deg, rgba(20, 26, 38, 0.86), rgba(14, 18, 28, 0.9));
@@ -671,3 +683,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: .8; }
 .duration-field { display: grid; gap: 6px; }
 .duration-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .duration-grid label { display: grid; gap: 3px; color: var(--muted); font-size: 12px; text-align: center; }
+
+/* Sent announcements: current ones and the archive */
+.announcement-history-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.announcement-history-head h3 { margin: 0; }
+.report-card .building-actions { margin-top: 8px; }
+.report-card .building-actions .filter { padding: 4px 8px; font-size: 13px; }

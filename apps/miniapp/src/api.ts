@@ -57,6 +57,7 @@ export type IncidentDetail = {
 
 export type Similar = { id: string; number: number; title: string; status: Status; reportsCount: number; createdAt: string };
 export type Announcement = { id: string; audience: 'all' | 'street' | 'building' | 'apartment'; text: string; createdAt: string; read: boolean };
+export type DeskAnnouncement = { id: string; audience: 'all' | 'street' | 'building' | 'apartment'; street: string | null; text: string; recipientsCount: number; createdAt: string; archivedAt: string | null; building: { address: string } | null; apartment: { number: string; building: { address: string } } | null; admin: { username: string } };
 export type MyCars = { items: Array<{ id: string; plate: string; owner: string | null; phones: string[] }>; showPhone: boolean; sharedPhone: string | null; limit: number };
 export type DeskApartment = { id: string; number: string; hasCode: boolean; contractNumber: string; residents: number; people: string[] };
 export type CarMatch = { id: string; plate: string; mine: boolean; owner: string | null; phones: string[]; address: string | null; canMessage: boolean };
@@ -243,6 +244,9 @@ export const api = {
       request<{ item: DeskBuilding; accessCode: string }>('POST', '/company/buildings', body),
     moveBuilding: (id: string, point: { latitude: number; longitude: number }) => request<unknown>('PATCH', `/company/buildings/${id}/location`, point),
     buildingCode: (id: string) => request<{ code: string }>('GET', `/company/buildings/${id}/code`).then((data) => data.code),
+    announcements: (archived: boolean, page: number) => request<{ items: DeskAnnouncement[]; total: number; page: number; pageSize: number; counts: { current: number; archived: number } }>('GET', `/company/announcements?archived=${archived}&page=${page}`),
+    archiveAnnouncement: (id: string, archived: boolean) => request<void>('POST', `/company/announcements/${id}/${archived ? 'archive' : 'restore'}`),
+    deleteAnnouncement: (id: string) => request<void>('DELETE', `/company/announcements/${id}`),
     announce: (body: { audience: 'all' | 'building' | 'apartment'; buildingId?: string; apartmentId?: string; text: string }) => request<{ recipientsCount: number }>('POST', '/company/announcements', body),
     joinRequests: () => request<{ items: Array<{ id: string; createdAt: string; requesterName: string; apartmentNumber: string; address: string }> }>('GET', '/company/join-requests').then((data) => data.items),
     decideJoin: (id: string, decision: 'approve' | 'reject') => request<unknown>('POST', `/company/join-requests/${id}/${decision}`),

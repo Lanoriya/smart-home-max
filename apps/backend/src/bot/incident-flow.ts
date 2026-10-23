@@ -2138,6 +2138,7 @@ function mainMenuButtons(): CallbackButton[][] {
 function announcementFilter(membership: { apartmentId: string; verifiedAt: Date; apartment: { buildingId: string; building: { street: string; companyId: string } } }) {
   const { companyId } = membership.apartment.building;
   return {
+    archivedAt: null,
     OR: [
       // "All" and "street" are addressed by one company to its own houses.
       { audience: 'all', companyId },

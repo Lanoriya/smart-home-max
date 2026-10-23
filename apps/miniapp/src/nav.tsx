@@ -37,6 +37,7 @@ export type Screen =
   | { name: 'desk-houses' }
   | { name: 'desk-apartments'; buildingId: string; address: string }
   | { name: 'desk-broadcast'; buildingId?: string }
+  | { name: 'desk-announcements' }
   | { name: 'desk-team' }
   | { name: 'desk-company' }
   | { name: 'desk-services' }

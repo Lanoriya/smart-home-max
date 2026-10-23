@@ -80,3 +80,61 @@ export async function queueAnnouncement(admin: AdminActor, companyId: string, in
   });
   return { ok: true as const, recipientsCount: memberships.length };
 }
+
+// ---------- the archive of the company ----------
+
+// Sent announcements are current until the company puts them into the
+// archive: then residents no longer see them in the bot and the app. An
+// archived announcement can be returned or deleted for good.
+
+export const announcementPageSize = 20;
+
+const historyInclude = {
+  building: { select: { address: true } },
+  apartment: { select: { number: true, building: { select: { address: true } } } },
+  admin: { select: { username: true } },
+} as const;
+
+// A null company is the platform administrator outside of any company.
+const ownAnnouncements = (companyId: string | null) => (companyId ? { companyId } : {});
+
+export async function companyAnnouncements(companyId: string | null, archived: boolean, page: number) {
+  const where = { ...ownAnnouncements(companyId), archivedAt: archived ? { not: null } : null };
+  const [items, total, current, inArchive] = await prisma.$transaction([
+    prisma.announcement.findMany({
+      where,
+      orderBy: archived ? [{ archivedAt: 'desc' }, { createdAt: 'desc' }] : [{ createdAt: 'desc' }],
+      skip: (page - 1) * announcementPageSize,
+      take: announcementPageSize,
+      include: historyInclude,
+    }),
+    prisma.announcement.count({ where }),
+    prisma.announcement.count({ where: { ...ownAnnouncements(companyId), archivedAt: null } }),
+    prisma.announcement.count({ where: { ...ownAnnouncements(companyId), archivedAt: { not: null } } }),
+  ]);
+  return { items, total, page, pageSize: announcementPageSize, counts: { current, archived: inArchive } };
+}
+
+export async function setAnnouncementArchived(adminId: string, companyId: string | null, id: string, archived: boolean) {
+  return prisma.$transaction(async (tx) => {
+    const result = await tx.announcement.updateMany({
+      where: { id, ...ownAnnouncements(companyId), archivedAt: archived ? null : { not: null } },
+      data: { archivedAt: archived ? new Date() : null },
+    });
+    if (result.count) await writeAdminAudit(tx, adminId, archived ? 'announcement_archived' : 'announcement_restored', 'announcement', id);
+    return result.count > 0;
+  });
+}
+
+export async function deleteAnnouncement(adminId: string, companyId: string | null, id: string) {
+  return prisma.$transaction(async (tx) => {
+    const result = await tx.announcement.deleteMany({ where: { id, ...ownAnnouncements(companyId) } });
+    if (result.count) await writeAdminAudit(tx, adminId, 'announcement_deleted', 'announcement', id);
+    return result.count > 0;
+  });
+}
+
+export const announcementHistorySchema = z.object({
+  page: z.coerce.number().int().min(1).max(1000).default(1),
+  archived: z.enum(['true', 'false']).default('false'),
+});

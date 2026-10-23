@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Button, Input, Textarea, useSnackbar } from '@maxhub/max-ui';
+import { useEffect, useState } from 'react';
+import { Button, Input, Segmented, Textarea, useSnackbar } from '@maxhub/max-ui';
 import { api, errorText, type Poll } from '../api';
 import { bridge } from '../bridge';
 import { useNavigation } from '../nav';
@@ -17,6 +17,23 @@ function until(poll: Poll) {
   const local = (value: string) => `${zoned(value, poll.timeZone)} по местному времени (${poll.zoneLabel})`;
   if (poll.closedAt) return `завершён ${local(poll.closedAt)}`;
   return poll.active ? `до ${local(poll.endsAt)}` : `завершён ${local(poll.endsAt)}`;
+}
+
+// A poll moves to the archive by itself when its time is over: the list is
+// loaded again right after the nearest end.
+function useReloadAtEnd(polls: Poll[] | null | undefined, reload: () => void) {
+  useEffect(() => {
+    const nextEnd = Math.min(...(polls ?? []).filter((poll) => poll.active).map((poll) => new Date(poll.endsAt).getTime()));
+    if (!Number.isFinite(nextEnd)) return;
+    const timer = window.setTimeout(reload, Math.min(Math.max(nextEnd - Date.now() + 1000, 1000), 2_147_000_000));
+    return () => window.clearTimeout(timer);
+  }, [polls]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+type PollTab = 'active' | 'archive';
+function PollTabs({ polls, tab, onChange }: { polls: Poll[]; tab: PollTab; onChange: (tab: PollTab) => void }) {
+  const running = polls.filter((poll) => poll.active).length;
+  return <Segmented items={[{ id: 'active', title: `Идут · ${running}` }, { id: 'archive', title: `Архив · ${polls.length - running}` }]} activeItem={tab} onClick={(id) => onChange(id as PollTab)} />;
 }
 
 export function PollCard({ poll, onVote, company }: { poll: Poll; onVote?: (optionId: string) => Promise<void>; company?: boolean }) {
@@ -72,9 +89,12 @@ export function PollsScreen() {
   const unread = useUnread();
   const { showSnackbar } = useSnackbar();
   const [items, setItems] = useState<Poll[] | null>(null);
+  const [tab, setTab] = useState<PollTab>('active');
   const list = items ?? data.data ?? null;
+  useReloadAtEnd(list, () => { setItems(null); void data.reload(); });
   if (data.error) return <Failure text={data.error} retry={data.reload} />;
   if (!list) return <Loading />;
+  const shown = list.filter((poll) => poll.active === (tab === 'active'));
   const vote = async (pollId: string, optionId: string) => {
     try {
       const item = await api.vote(pollId, optionId);
@@ -85,8 +105,11 @@ export function PollsScreen() {
   };
   return (
     <Page title="Опросы" subtitle="Управляющая компания спрашивает мнение жителей. Голос — один от квартиры">
-      {list.length ? list.map((poll) => <PollCard key={poll.id} poll={poll} onVote={(optionId) => vote(poll.id, optionId)} />)
-        : <Empty icon="chart" title="Опросов пока нет" text="Когда УК начнёт опрос, бот пришлёт сообщение, а вопрос появится здесь." />}
+      {list.length ? <PollTabs polls={list} tab={tab} onChange={setTab} /> : null}
+      {shown.length ? shown.map((poll) => <PollCard key={poll.id} poll={poll} onVote={(optionId) => vote(poll.id, optionId)} />)
+        : !list.length ? <Empty icon="chart" title="Опросов пока нет" text="Когда УК начнёт опрос, бот пришлёт сообщение, а вопрос появится здесь." />
+        : tab === 'active' ? <Empty icon="chart" title="Сейчас опросов нет" text="Завершённые опросы с итогами — во вкладке «Архив»." />
+        : <Empty icon="chart" title="Архив пуст" text="Сюда попадают опросы, время которых вышло." />}
     </Page>
   );
 }
@@ -98,26 +121,32 @@ export function DeskPollsScreen() {
   const confirm = useConfirm();
   const { showSnackbar } = useSnackbar();
   const data = useLoad(() => api.desk.polls(), []);
+  const [tab, setTab] = useState<PollTab>('active');
+  useReloadAtEnd(data.data, () => void data.reload());
   if (data.error) return <Failure text={data.error} retry={data.reload} />;
   if (!data.data) return <Loading />;
+  const shown = data.data.filter((poll) => poll.active === (tab === 'active'));
   return (
     <Page title="Опросы" subtitle="Вопрос жителям всех домов или одного дома, с таймером" after={<Button size="small" onClick={() => navigation.push({ name: 'desk-poll-new' })}>+ Опрос</Button>}>
-      {data.data.length ? data.data.map((poll) => (
+      {data.data.length ? <PollTabs polls={data.data} tab={tab} onChange={setTab} /> : null}
+      {shown.length ? shown.map((poll) => (
         <div key={poll.id} className="poll-desk">
           <PollCard poll={poll} company />
           <p className="poll-meta">Явка: {poll.votes} из {poll.apartmentsTotal} {plural(poll.apartmentsTotal, 'квартиры', 'квартир', 'квартир')}{poll.apartmentsTotal ? ` (${Math.round((poll.votes / poll.apartmentsTotal) * 100)}%)` : ''}</p>
           <div className="button-pair">
             {poll.active ? <Button size="medium" variant="secondary" stretched onClick={async () => {
-              if (!await confirm({ text: 'Завершить опрос сейчас? Голосовать больше будет нельзя.', confirm: 'Завершить' })) return;
+              if (!await confirm({ text: 'Завершить опрос сейчас? Голосовать больше будет нельзя, опрос перейдёт в архив.', confirm: 'Завершить' })) return;
               try { await api.desk.closePoll(poll.id); await data.reload(); } catch (error) { showSnackbar({ text: errorText(error) }); }
             }}>Завершить</Button> : null}
             <Button size="medium" variant="secondary" stretched onClick={async () => {
-              if (!await confirm({ text: 'Удалить опрос вместе с голосами?', confirm: 'Удалить', destructive: true })) return;
+              if (!await confirm({ text: 'Удалить опрос вместе с голосами? Восстановить его будет нельзя.', confirm: 'Удалить', destructive: true })) return;
               try { await api.desk.deletePoll(poll.id); await data.reload(); } catch (error) { showSnackbar({ text: errorText(error) }); }
             }}>Удалить</Button>
           </div>
         </div>
-      )) : <Empty icon="chart" title="Опросов пока нет" text="Спросите жителей: удобное время работ, выбор подрядчика, благоустройство двора." />}
+      )) : !data.data.length ? <Empty icon="chart" title="Опросов пока нет" text="Спросите жителей: удобное время работ, выбор подрядчика, благоустройство двора." />
+        : tab === 'active' ? <Empty icon="chart" title="Сейчас опросов нет" text="Завершённые опросы — во вкладке «Архив». Начните новый кнопкой «+ Опрос»." />
+        : <Empty icon="chart" title="Архив пуст" text="Сюда попадают опросы, время которых вышло или которые завершены вручную." />}
     </Page>
   );
 }

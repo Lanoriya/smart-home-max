@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Button, CellAction, CellSimple, Input, Textarea, Typography, useSnackbar } from '@maxhub/max-ui';
-import { api, errorText, type Company, type Invite, type Stats } from '../api';
+import { Button, CellAction, CellSimple, Input, Segmented, Textarea, Typography, useSnackbar } from '@maxhub/max-ui';
+import { api, errorText, type Company, type DeskAnnouncement, type Invite, type Stats } from '../api';
+import { useConfirm } from '../components/confirm';
 import { bridge } from '../bridge';
 import { useNavigation } from '../nav';
 import { useLoad, useSession } from '../session';
@@ -82,6 +83,7 @@ function Desk({ canSwitch, onSwitch }: { canSwitch: boolean; onSwitch: () => voi
         {joins.data?.length ? <CellAction before={<IconTile name="key" color="#ff9500" />} onClick={() => navigation.push({ name: 'desk-joins' })} showChevron>Подключение к квартирам: {joins.data.length}</CellAction> : null}
         <CellAction before={<IconTile name="map" color="#007aff" />} onClick={() => navigation.push({ name: 'desk-houses' })} showChevron>Дома на карте, {stats.buildings}</CellAction>
         <CellAction before={<IconTile name="megaphone" color="#34c759" />} onClick={() => navigation.push({ name: 'desk-broadcast' })} showChevron>Объявление жителям</CellAction>
+        <CellAction before={<IconTile name="megaphone" color="#8a8f98" />} onClick={() => navigation.push({ name: 'desk-announcements' })} showChevron>Отправленные объявления и архив</CellAction>
         <CellAction before={<IconTile name="poll" color="#ff9500" />} onClick={() => navigation.push({ name: 'desk-polls' })} showChevron>Опросы жителей</CellAction>
         <CellAction before={<IconTile name="calendar" color="#5856d6" />} onClick={() => navigation.push({ name: 'desk-appointments' })} showChevron>Приём граждан</CellAction>
         {supervisor ? <CellAction before={<IconTile name="people" color="#5856d6" />} onClick={() => navigation.push({ name: 'desk-team' })} showChevron>Команда и приглашения</CellAction> : null}
@@ -177,6 +179,73 @@ export function DeskBroadcastScreen({ buildingId }: { buildingId?: string }) {
         <Textarea placeholder="Например: 22 октября с 10:00 до 14:00 отключение холодной воды в связи с ремонтом стояка" rows={5} maxLength={2000} value={text} onChange={(event) => setText(event.target.value)} />
         <Button size="large" stretched loading={busy} disabled={text.trim().length < 3 || busy || !target || (audience === 'apartment' && !apartmentNumber.trim())} onClick={() => void send()}>Отправить</Button>
       </div>
+    </Page>
+  );
+}
+
+function announcementAudience(item: DeskAnnouncement) {
+  if (item.audience === 'street') return `Улица: ${item.street ?? 'не указана'}`;
+  if (item.audience === 'building') return `Дом: ${item.building?.address ?? 'удалён'}`;
+  if (item.audience === 'apartment') return item.apartment ? `Кв. ${item.apartment.number}, ${item.apartment.building.address}` : 'Квартира удалена';
+  return 'Всем жителям';
+}
+
+// Sent announcements: the current ones residents see, and the archive the
+// company put away. From the archive an announcement is returned or deleted.
+export function DeskAnnouncementsScreen() {
+  const navigation = useNavigation();
+  const confirm = useConfirm();
+  const { showSnackbar } = useSnackbar();
+  const [archived, setArchived] = useState(false);
+  const [page, setPage] = useState(1);
+  const list = useLoad(() => api.desk.announcements(archived, page), [archived, page]);
+  const pages = list.data ? Math.max(1, Math.ceil(list.data.total / list.data.pageSize)) : 1;
+  const after = async () => {
+    // The last item of the last page went away: show the page before it.
+    if (list.data && list.data.items.length === 1 && page > 1) setPage(page - 1); else await list.reload();
+  };
+  const move = async (item: DeskAnnouncement) => {
+    try {
+      await api.desk.archiveAnnouncement(item.id, !archived);
+      showSnackbar({ text: archived ? 'Объявление снова видно жителям' : 'Убрано в архив: жители его больше не видят' });
+      await after();
+    } catch (error) { showSnackbar({ text: errorText(error) }); }
+  };
+  const remove = async (item: DeskAnnouncement) => {
+    if (!await confirm({ text: 'Удалить объявление насовсем? Восстановить его будет нельзя. Уже доставленные сообщения останутся у жителей в чате с ботом.', confirm: 'Удалить', destructive: true })) return;
+    try { await api.desk.deleteAnnouncement(item.id); showSnackbar({ text: 'Объявление удалено' }); await after(); } catch (error) { showSnackbar({ text: errorText(error) }); }
+  };
+  const counts = list.data?.counts;
+  return (
+    <Page title="Объявления жителям" subtitle={archived ? 'Жители не видят архивные объявления. Их можно вернуть или удалить' : 'Эти объявления жители видят в разделе «Объявления»'}
+      after={<Button size="small" onClick={() => navigation.push({ name: 'desk-broadcast' })}>+ Объявление</Button>}>
+      <Segmented items={[{ id: 'current', title: `Актуальные${counts ? ` · ${counts.current}` : ''}` }, { id: 'archive', title: `Архив${counts ? ` · ${counts.archived}` : ''}` }]} activeItem={archived ? 'archive' : 'current'}
+        onClick={(id) => { setArchived(id === 'archive'); setPage(1); }} />
+      {list.error ? <Failure text={list.error} retry={list.reload} /> : !list.data ? <Loading /> : list.data.items.length ? (
+        <div className="announcements">
+          {list.data.items.map((item) => (
+            <article key={item.id} className="announcement">
+              <header className="announcement-head">
+                <span>{announcementAudience(item)}, {ago(item.createdAt)}</span>
+                <span className="announcement-read">{item.recipientsCount} {plural(item.recipientsCount, 'получатель', 'получателя', 'получателей')}</span>
+              </header>
+              <p className="announcement-text pre-wrap">{item.text}</p>
+              <div className="button-pair">
+                <Button size="medium" variant="secondary" stretched onClick={() => void move(item)}>{archived ? 'Вернуть жителям' : 'В архив'}</Button>
+                <Button size="medium" variant="secondary" stretched onClick={() => void remove(item)}>Удалить</Button>
+              </div>
+            </article>
+          ))}
+          {pages > 1 ? (
+            <div className="button-pair">
+              <Button size="medium" variant="secondary" stretched disabled={page <= 1} onClick={() => setPage(page - 1)}>Новее</Button>
+              <Button size="medium" variant="secondary" stretched disabled={page >= pages} onClick={() => setPage(page + 1)}>Ранее</Button>
+            </div>
+          ) : null}
+        </div>
+      ) : archived
+        ? <Empty icon="megaphone" title="Архив пуст" text="Уберите сюда неактуальные объявления: жители перестанут их видеть." />
+        : <Empty icon="megaphone" title="Актуальных объявлений нет" text="Отправьте объявление жителям — оно появится здесь." />}
     </Page>
   );
 }

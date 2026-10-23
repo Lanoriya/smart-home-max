@@ -247,6 +247,9 @@ model Announcement {
   companyId       String     @map("company_id") @db.Uuid
   adminId         String     @map("admin_id") @db.Uuid
   createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  // Put away by the company: residents no longer see it, the company keeps it
+  // in its archive until it is deleted.
+  archivedAt      DateTime?  @map("archived_at") @db.Timestamptz(3)
   building        Building?  @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   apartment       Apartment? @relation(fields: [apartmentId], references: [id], onDelete: Cascade)
   admin           Admin      @relation(fields: [adminId], references: [id], onDelete: Restrict)

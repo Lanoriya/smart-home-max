@@ -521,6 +521,7 @@ residentRouter.post('/incidents/:id/comments', async (request, response, next) =
 function announcementsFor(membership: NonNullable<Awaited<ReturnType<typeof membershipOf>>>): Prisma.AnnouncementWhereInput {
   const { companyId, street } = membership.apartment.building;
   return {
+    archivedAt: null,
     OR: [
       { audience: 'all', companyId },
       { audience: 'street', street, companyId },

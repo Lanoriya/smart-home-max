@@ -10,7 +10,7 @@ import { MapScreen, JoinHouseScreen } from './screens/map';
 import { IncidentsScreen, IncidentScreen } from './screens/incidents';
 import { NewIncidentScreen } from './screens/new-incident';
 import { MoreScreen, AnnouncementsScreen, ContactsScreen, CompanyInfoScreen, InviteScreen } from './screens/more';
-import { DeskScreen, DeskIncidentsScreen, DeskTeamScreen, DeskCompanyScreen, DeskBroadcastScreen, DeskJoinsScreen, DeskStatsScreen } from './screens/desk';
+import { DeskScreen, DeskIncidentsScreen, DeskTeamScreen, DeskCompanyScreen, DeskBroadcastScreen, DeskAnnouncementsScreen, DeskJoinsScreen, DeskStatsScreen } from './screens/desk';
 import { DeskServicesScreen } from './screens/desk-services';
 import { DeskDutiesScreen, DutiesScreen, PlatformDutiesScreen } from './screens/duties';
 import { DeskIncidentScreen } from './screens/desk-incident';
@@ -136,6 +136,7 @@ function CurrentScreen() {
     case 'desk-incident': return <DeskIncidentScreen key={screen.id} reference={screen.id} />;
     case 'desk-houses': return <DeskHousesScreen />;
     case 'desk-apartments': return <DeskApartmentsScreen buildingId={screen.buildingId} address={screen.address} />;
+    case 'desk-announcements': return <DeskAnnouncementsScreen />;
     case 'desk-broadcast': return <DeskBroadcastScreen {...(screen.buildingId ? { buildingId: screen.buildingId } : {})} />;
     case 'desk-team': return <DeskTeamScreen />;
     case 'desk-company': return <DeskCompanyScreen />;

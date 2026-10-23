@@ -54,11 +54,23 @@ export function PollsManager({ onNotice }: { onNotice: Notify }) {
   const [allowChange, setAllowChange] = useState(true);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  const [archiveView, setArchiveView] = useState(false);
   const reload = async () => { try { setItems((await api<{ items: Poll[] }>(app('/company/polls'))).items); } catch { onNotice('Не удалось загрузить опросы.', 'error'); } };
   useEffect(() => {
     void reload();
     void api<{ items: House[] }>('/api/buildings').then(({ items: value }) => setHouses(value)).catch(() => setHouses([]));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // A poll moves to the archive by itself when its time is over: the list is
+  // loaded again right after the nearest end.
+  useEffect(() => {
+    const nextEnd = Math.min(...(items ?? []).filter((poll) => poll.active).map((poll) => new Date(poll.endsAt).getTime()));
+    if (!Number.isFinite(nextEnd)) return;
+    const timer = window.setTimeout(() => void reload(), Math.min(Math.max(nextEnd - Date.now() + 1000, 1000), 2_147_000_000));
+    return () => window.clearTimeout(timer);
+  }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
+  const running = items?.filter((poll) => poll.active) ?? [];
+  const archived = items?.filter((poll) => !poll.active) ?? [];
+  const shown = archiveView ? archived : running;
   const filled = options.map((option) => option.trim()).filter(Boolean);
   async function create(event: FormEvent) {
     event.preventDefault();
@@ -71,14 +83,15 @@ export function PollsManager({ onNotice }: { onNotice: Notify }) {
     } catch (failure) { onNotice(failure instanceof ApiError && failure.code ? errors[failure.code] ?? 'Не удалось начать опрос.' : 'Не удалось начать опрос.', 'error'); } finally { setBusy(false); }
   }
   const act = async (poll: Poll, action: 'close' | 'delete') => {
-    if (!window.confirm(action === 'close' ? 'Завершить опрос сейчас? Голосовать больше будет нельзя.' : 'Удалить опрос вместе с голосами?')) return;
+    if (!window.confirm(action === 'close' ? 'Завершить опрос сейчас? Голосовать больше будет нельзя, опрос перейдёт в архив.' : 'Удалить опрос вместе с голосами? Восстановить его будет нельзя.')) return;
     try { await api(app(`/company/polls/${poll.id}${action === 'close' ? '/close' : ''}`), { method: action === 'close' ? 'POST' : 'DELETE' }); await reload(); } catch { onNotice('Не удалось выполнить действие.', 'error'); }
   };
   return <div className="buildings-layout">
     <section className="panel buildings-panel">
-      <div className="panel-head"><div><h2>Опросы</h2><p className="form-hint">Голос — один от квартиры. В анонимном опросе жители видят только числа; здесь всегда видно, какие квартиры за что голосовали.</p></div></div>
+      <div className="panel-head"><div><h2>Опросы</h2><p className="form-hint">Голос — один от квартиры. В анонимном опросе жители видят только числа; здесь всегда видно, какие квартиры за что голосовали. Когда время выходит или опрос завершён вручную, он переходит в архив.</p></div>
+        <div className="segmented" role="group" aria-label="Что показать"><button type="button" aria-pressed={!archiveView} onClick={() => setArchiveView(false)}>Идут{items ? ` · ${running.length}` : ''}</button><button type="button" aria-pressed={archiveView} onClick={() => setArchiveView(true)}>Архив{items ? ` · ${archived.length}` : ''}</button></div></div>
       <div className="building-list">
-        {items === null ? <p className="state-message">Загружаем…</p> : items.length === 0 ? <p className="state-message">Опросов пока нет. Начните первый в форме справа.</p> : items.map((poll) => {
+        {items === null ? <p className="state-message">Загружаем…</p> : shown.length === 0 ? <p className="state-message">{archiveView ? 'Архив пуст. Сюда попадают завершённые опросы.' : items.length ? 'Сейчас опросов нет — все завершены и лежат в архиве. Начните новый в форме справа.' : 'Опросов пока нет. Начните первый в форме справа.'}</p> : shown.map((poll) => {
           const total = poll.options.reduce((sum, option) => sum + (option.count ?? 0), 0);
           return <article className="building-row poll-row" key={poll.id}>
             <div className="poll-body">
