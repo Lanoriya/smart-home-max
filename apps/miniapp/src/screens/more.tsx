@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, CellAction, CellSimple, Typography, useSnackbar } from '@maxhub/max-ui';
+import { Button, CellAction, CellSimple, Switch, Typography, useSnackbar } from '@maxhub/max-ui';
 import { api, errorText } from '../api';
 import { bridge } from '../bridge';
 import { useNavigation } from '../nav';
@@ -16,6 +16,15 @@ export function MoreScreen() {
   const navigation = useNavigation();
   const { showSnackbar } = useSnackbar();
   const confirm = useConfirm();
+  const [savingReminders, setSavingReminders] = useState(false);
+  const setReminders = async (enabled: boolean) => {
+    setSavingReminders(true);
+    try {
+      await api.desk.setLegalReminders(enabled);
+      await refresh();
+      showSnackbar({ text: enabled ? 'Напоминания о сроках включены' : 'Напоминания о сроках отключены' });
+    } catch (error) { showSnackbar({ text: errorText(error) }); } finally { setSavingReminders(false); }
+  };
   const leave = async () => {
     if (!await confirm({ text: 'Отвязаться от квартиры? Заявки дома и объявления станут недоступны, а согласие на обработку данных будет отозвано: телефон и автомобили сотрутся.', confirm: 'Отвязаться', destructive: true })) return;
     try {
@@ -48,6 +57,13 @@ export function MoreScreen() {
       {me.admin && me.admin.role !== 'platform_admin' && mode === 'company' ? (
         <Section header="Работа в УК">
           <CellSimple before={<IconTile name="desk" color="#5856d6" />} title={me.admin.company?.name ?? 'Управляющая компания'} subtitle="Вы сотрудник этой УК" />
+          <label className="switch-row">
+            <span className="switch-row-text">
+              <span className="switch-row-title">Напоминания о сроках заявок</span>
+              <span className="switch-row-sub">{me.admin.legalReminders ? 'Бот напишет в MAX, когда срок по закону скоро истечёт и когда он истёк' : 'Бот не пишет о сроках. Сроки видны в пульте'}</span>
+            </span>
+            <Switch checked={me.admin.legalReminders} disabled={savingReminders} onChange={(event) => void setReminders(event.target.checked)} />
+          </label>
           <CellAction mode="destructive" onClick={async () => {
             if (!await confirm({ text: `Выйти из сотрудников «${me.admin?.company?.name ?? 'УК'}»? Доступ к пульту пропадёт сразу. Вернуться можно только по новому приглашению.`, confirm: 'Выйти', destructive: true })) return;
             try { await api.desk.leave(); setMode('resident'); await refresh(); showSnackbar({ text: 'Вы больше не сотрудник УК' }); } catch (error) { showSnackbar({ text: errorText(error) }); }

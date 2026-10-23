@@ -62,14 +62,14 @@ residentRouter.get('/me', async (_request, response, next) => {
       membershipOf(user.id),
       pendingJoinRequest(user.id),
       prisma.user.findUnique({ where: { id: user.id }, select: { displayName: true, maxUsername: true, sharedPhone: true, consentAt: true } }),
-      admin ? prisma.admin.findUnique({ where: { id: admin.id }, select: { role: true, company: { select: { id: true, name: true } } } }) : null,
+      admin ? prisma.admin.findUnique({ where: { id: admin.id }, select: { role: true, legalReminders: true, company: { select: { id: true, name: true } } } }) : null,
     ]);
     const adminZone = adminRecord?.company ? await companyZone(adminRecord.company.id) : null;
     response.json({
       user: { id: user.id, displayName: profile?.displayName ?? null, username: profile?.maxUsername ?? null, phone: profile?.sharedPhone ?? null, consent: Boolean(profile?.consentAt) },
       residence: membership ? residence(membership) : null,
       pendingJoin: pending ? { address: pending.apartment.building.address, apartmentNumber: pending.apartment.number, createdAt: pending.createdAt } : null,
-      admin: adminRecord ? { role: adminRecord.role, company: adminRecord.company, timeZone: adminZone } : null,
+      admin: adminRecord ? { role: adminRecord.role, company: adminRecord.company, timeZone: adminZone, legalReminders: adminRecord.legalReminders } : null,
       botUsername: env.MAX_BOT_USERNAME ?? null,
     });
   } catch (error) { next(error); }

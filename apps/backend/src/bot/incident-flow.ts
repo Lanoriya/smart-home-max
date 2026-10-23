@@ -695,6 +695,10 @@ export class IncidentFlow {
       ), [[{ text: platform ? 'Открыть веб-админку' : 'Открыть веб-диспетчерскую', payload: 'desk:web:open', url }], [{ text: 'В главное меню', payload: 'menu:main' }]]);
       return true;
     }
+    if (payload === 'staff:reminders' || payload === 'staff:reminders:on' || payload === 'staff:reminders:off') {
+      await this.showLegalReminders(maxUserId, payload === 'staff:reminders' ? undefined : payload === 'staff:reminders:on');
+      return true;
+    }
     if (payload === 'city:change') {
       await this.showCityChoice(maxUserId, user.id);
       return true;
@@ -1333,6 +1337,30 @@ export class IncidentFlow {
       ]),
       ['Нажмите номер заявки, чтобы открыть её, присоединиться или обсудить.'],
     ), buttons);
+  }
+
+  // Reminders of the legal terms for a company employee: shown, or switched
+  // on or off for this employee only.
+  private async showLegalReminders(maxUserId: string, enable?: boolean) {
+    const admin = await prisma.admin.findUnique({ where: { maxUserId }, select: { id: true, companyId: true, role: true, legalReminders: true } });
+    if (!admin?.companyId || admin.role === 'platform_admin') {
+      await this.messenger.sendMessageToUser(maxUserId, 'Напоминания о сроках получают сотрудники УК.', mainMenuLinkButtons());
+      return;
+    }
+    const enabled = enable ?? admin.legalReminders;
+    if (enable !== undefined && enable !== admin.legalReminders) await prisma.admin.update({ where: { id: admin.id }, data: { legalReminders: enable } });
+    await this.messenger.sendMessageToUser(maxUserId, blocks(
+      [bold(enabled ? 'Напоминания о сроках включены' : 'Напоминания о сроках отключены')],
+      [enabled
+        ? 'Бот напишет, когда срок по закону по заявке скоро истечёт и когда он истёк.'
+        : 'Бот больше не пишет о сроках по заявкам. Сроки по-прежнему видны в пульте и в веб-диспетчерской.'],
+      ['Настройка действует только для вас — коллеги получают напоминания по своим настройкам.'],
+    ), [
+      [enabled
+        ? { text: 'Отключить напоминания', payload: 'staff:reminders:off', intent: 'negative' }
+        : { text: 'Включить напоминания', payload: 'staff:reminders:on', intent: 'positive' }],
+      [{ text: 'В главное меню', payload: 'menu:main' }],
+    ]);
   }
 
   private async showBotInfo(maxUserId: string) {
@@ -2083,9 +2111,13 @@ function parseDraft(data: unknown): IncidentDraft | null {
 
 // The web desk for those who work in it: company staff and the platform.
 async function deskButton(maxUserId: string): Promise<CallbackButton[][]> {
-  const admin = await prisma.admin.findUnique({ where: { maxUserId }, select: { companyId: true, role: true } });
+  const admin = await prisma.admin.findUnique({ where: { maxUserId }, select: { companyId: true, role: true, legalReminders: true } });
   if (!admin || (!admin.companyId && admin.role !== 'platform_admin')) return [];
-  return [[{ text: admin.role === 'platform_admin' ? 'Веб-админка платформы' : 'Веб-диспетчерская УК', payload: 'desk:web' }]];
+  if (admin.role === 'platform_admin') return [[{ text: 'Веб-админка платформы', payload: 'desk:web' }]];
+  return [
+    [{ text: 'Веб-диспетчерская УК', payload: 'desk:web' }],
+    [{ text: admin.legalReminders ? 'Напоминания о сроках: вкл.' : 'Напоминания о сроках: выкл.', payload: 'staff:reminders' }],
+  ];
 }
 
 function mainMenuButtons(): CallbackButton[][] {
@@ -2221,7 +2253,7 @@ function pageLine(page: number, pages: number, total: number) {
 // choosing an address and answering or cancelling a join request.
 const menuLater = 'Главное меню откроется, когда вы выберете дом и квартиру — здесь или в приложении.';
 
-const openPayloads = new Set(['menu:main', 'flow:cancel', 'uk:contacts', 'uk:duties', 'emergency:services', 'bot:info', 'address:search', 'address:browse', 'city:change', 'desk:web', 'apartment:change', 'apartment:change:confirm', 'join:cancel', 'join:status']);
+const openPayloads = new Set(['menu:main', 'flow:cancel', 'uk:contacts', 'uk:duties', 'emergency:services', 'bot:info', 'address:search', 'address:browse', 'city:change', 'desk:web', 'staff:reminders', 'staff:reminders:on', 'staff:reminders:off', 'apartment:change', 'apartment:change:confirm', 'join:cancel', 'join:status']);
 const openPrefixes = ['consent:accept:', 'building:choose:', 'city:choose:', 'street:choose:', 'join:approve:', 'join:reject:'];
 function opensWithoutAddress(payload: string) {
   return openPayloads.has(payload) || openPrefixes.some((prefix) => payload.startsWith(prefix));

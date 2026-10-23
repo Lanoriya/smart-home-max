@@ -24,7 +24,7 @@ export type Me = {
     timeZone: string;
   };
   pendingJoin: null | { address: string; apartmentNumber: string; createdAt: string };
-  admin: null | { role: Role; company: { id: string; name: string } | null; timeZone: string | null };
+  admin: null | { role: Role; company: { id: string; name: string } | null; timeZone: string | null; legalReminders: boolean };
   botUsername: string | null;
 };
 
@@ -216,6 +216,7 @@ export const api = {
     overview: () => request<{ company: Company; stats: Stats; pendingJoins: number; role: Role; timeZone: string }>('GET', '/company/overview'),
     webLink: () => request<{ url: string }>('POST', '/company/web-link'),
     leave: () => request<void>('POST', '/company/leave'),
+    setLegalReminders: (enabled: boolean) => request<{ enabled: boolean }>('PUT', '/company/legal-reminders', { enabled }),
     polls: () => request<{ items: Array<Poll & { apartmentsTotal: number }> }>('GET', '/company/polls').then((data) => data.items),
     createPoll: (body: { question: string; options: string[]; buildingId: string | null; endsAt: string; anonymous: boolean; allowChange: boolean }) => request<{ id: string; recipients: number }>('POST', '/company/polls', body),
     closePoll: (id: string) => request<void>('POST', `/company/polls/${id}/close`),
@@ -294,6 +295,7 @@ export function errorText(error: unknown): string {
     admin_of_another_company: 'Вы уже сотрудник другой УК.',
     platform_admin: 'Вы главный администратор платформы — приглашение не нужно.',
     insufficient_permissions: 'Недостаточно прав.',
+    not_company_staff: 'Настройка доступна сотрудникам УК.',
     company_required: 'Выберите УК.',
     invalid_company: 'Проверьте поля: название и телефон обязательны.',
     invalid_building: 'Проверьте адрес и числа квартир и подъездов.',

@@ -305,6 +305,9 @@ model Admin {
   // MAX account that opens the mini-app as this administrator.
   maxUserId    String?         @unique @map("max_user_id")
   displayName  String?         @map("display_name")
+  // Reminders of the legal terms of incidents in MAX; each employee can
+  // switch them off for themselves.
+  legalReminders Boolean       @default(true) @map("legal_reminders")
   createdAt    DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   company      ManagementCompany? @relation(fields: [companyId], references: [id], onDelete: Restrict)
   invitesCreated AdminInvite[] @relation("InviteCreator")

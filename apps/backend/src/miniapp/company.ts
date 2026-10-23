@@ -377,6 +377,18 @@ companyRouter.post('/leave', async (_request, response, next) => {
   } catch (error) { next(error); }
 });
 
+// Reminders of the legal terms in MAX, for this employee only.
+companyRouter.put('/legal-reminders', async (request, response, next) => {
+  try {
+    const parsed = z.object({ enabled: z.boolean() }).safeParse(request.body);
+    if (!parsed.success) { response.status(400).json({ code: 'invalid_setting' }); return; }
+    const actor = admin(response);
+    if (actor.role === 'platform_admin') { response.status(409).json({ code: 'not_company_staff' }); return; }
+    await prisma.admin.update({ where: { id: actor.id }, data: { legalReminders: parsed.data.enabled } });
+    response.json({ enabled: parsed.data.enabled });
+  } catch (error) { next(error); }
+});
+
 // ---------- codes of houses and apartments ----------
 
 companyRouter.patch('/buildings/:id/code', requireMiniAppAdmin('supervisor'), async (request, response, next) => {

@@ -5,7 +5,8 @@ import { buildingZone } from '../shared/time-zone.js';
 
 // Reminders of the legal terms to the staff of the company, in MAX: once when
 // the term runs out soon (a quarter of it is left, but not less than an hour)
-// and once when it has passed. Each is sent once per incident.
+// and once when it has passed. Each is sent once per incident. An employee
+// who switched the reminders off does not get them.
 
 const activeStatuses = ['new', 'acknowledged', 'in_progress'] as const;
 const lookBackMs = 45 * 24 * 3_600_000;
@@ -59,7 +60,7 @@ async function remindPage(incidents: ReminderIncident[], staffOf: Map<string, Ar
     let staff = staffOf.get(incident.building.companyId);
     if (!staff) {
       staff = await prisma.admin.findMany({
-        where: { companyId: incident.building.companyId, maxUserId: { not: null }, role: { in: ['dispatcher', 'supervisor'] } },
+        where: { companyId: incident.building.companyId, maxUserId: { not: null }, role: { in: ['dispatcher', 'supervisor'] }, legalReminders: true },
         select: { maxUserId: true },
       });
       staffOf.set(incident.building.companyId, staff);
@@ -73,6 +74,7 @@ async function remindPage(incidents: ReminderIncident[], staffOf: Map<string, Ar
     const buttons = [
       [{ text: 'Открыть в приложении', payload: `desk_${incident.number}`, openApp: true }],
       [{ text: 'Открыть в диспетчерской', payload: 'desk:web' }],
+      [{ text: 'Отключить напоминания о сроках', payload: 'staff:reminders:off' }],
       [{ text: 'В главное меню', payload: 'menu:main' }],
     ];
     await prisma.$transaction(async (tx) => {
