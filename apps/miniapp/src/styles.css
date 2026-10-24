@@ -109,6 +109,9 @@ body { overflow-x: hidden; background: #f5f7fa; }
 .plate-medium { font-size: 13px; padding: 2px 8px; }
 .plate-large { font-size: 26px; padding: 8px 16px; border-radius: 6px; box-shadow: inset 0 0 0 2.5px rgba(255, 255, 255, 0.9); }
 .code-plate { display: flex; justify-content: center; padding: 12px 0; }
+/* White under the code in the dark theme too: cameras read dark on light. */
+.qr-preview { align-self: center; width: min(260px, 72vw); padding: 12px; border-radius: 16px; background: #fff; }
+.qr-preview svg { display: block; width: 100%; height: auto; }
 
 /* Status: a coloured dot and a word, readable without colour */
 .status {

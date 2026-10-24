@@ -250,6 +250,7 @@ export const api = {
     createBuilding: (body: { street: string; house: string; apartmentsCount: number; entrancesCount: number; latitude: number; longitude: number; fiasGuid?: string | null; floors?: number | null; builtYear?: number | null; city?: string | null }) =>
       request<{ item: DeskBuilding; accessCode: string }>('POST', '/company/buildings', body),
     moveBuilding: (id: string, point: { latitude: number; longitude: number }) => request<unknown>('PATCH', `/company/buildings/${id}/location`, point),
+    residentLink: (id: string) => request<{ link: string; address: string; companyName: string; companyPhone: string }>('GET', `/company/buildings/${id}/resident-link`),
     buildingCode: (id: string) => request<{ code: string }>('GET', `/company/buildings/${id}/code`).then((data) => data.code),
     announcements: (archived: boolean, page: number) => request<{ items: DeskAnnouncement[]; total: number; page: number; pageSize: number; counts: { current: number; archived: number } }>('GET', `/company/announcements?archived=${archived}&page=${page}`),
     archiveAnnouncement: (id: string, archived: boolean) => request<void>('POST', `/company/announcements/${id}/${archived ? 'archive' : 'restore'}`),
@@ -293,6 +294,8 @@ export function errorText(error: unknown): string {
     apartment_not_found: 'Такой квартиры в доме нет. Проверьте номер.',
     residence_required: 'Сначала подтвердите свою квартиру.',
     incident_not_found: 'Заявка не найдена или недоступна.',
+    building_not_found: 'Дом не найден или передан другой УК.',
+    bot_username_missing: 'Не задано имя бота (MAX_BOT_USERNAME): ссылку для QR-кода не собрать.',
     building_exists: 'Такой дом уже подключён к сервису.',
     recipients_not_found: 'В этом доме пока нет подключённых жителей.',
     invalid_status_transition: 'Такой переход статуса невозможен.',

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import QRCode from 'qrcode';
 import { applyLookup, emptyHouse, houseBody, HouseFields, houseReady, useHouseLookup, type HouseValues } from '../components/HouseForm';
 import { Button, CellAction, CellSimple, Input, Typography, useSnackbar } from '@maxhub/max-ui';
 import { api, errorText, type DeskApartment, type DeskBuilding } from '../api';
@@ -12,7 +13,8 @@ import { useConfirm } from '../components/confirm';
 import { plural, addressMatches } from '../labels';
 
 // Houses of the company on the map: add a house by tapping its place, drag a
-// pin to correct it, reveal the house code to print for residents.
+// pin to correct it, reveal the house code to print for residents, get the
+// QR code for the entrance.
 
 type Mode = { kind: 'view' } | { kind: 'add'; point: Point | null } | { kind: 'move'; id: string; point: Point };
 
@@ -161,10 +163,12 @@ function HouseSheet({ house, canSeeCode, isPlatform, onMove, onChanged }: { hous
   const { showSnackbar } = useSnackbar();
   const [code, setCode] = useState<string | null>(null);
   const [transfer, setTransfer] = useState(false);
+  const [qr, setQr] = useState(false);
   const reveal = async () => {
     try { setCode(await api.desk.buildingCode(house.id)); } catch (error) { showSnackbar({ text: errorText(error) }); }
   };
   if (code) return <CodeCard buildingId={house.id} address={house.address} code={code} onBack={() => setCode(null)} />;
+  if (qr) return <HouseQrCard house={house} onBack={() => setQr(false)} />;
   if (transfer) return <TransferForm house={house} onDone={onChanged} onBack={() => setTransfer(false)} />;
   return (
     <div className="sheet">
@@ -174,11 +178,52 @@ function HouseSheet({ house, canSeeCode, isPlatform, onMove, onChanged }: { hous
       <Section>
         <CellAction onClick={() => navigation.push({ name: 'desk-incidents' })} showChevron>Открытые заявки: {house.openIncidents}</CellAction>
         <CellAction onClick={() => navigation.push({ name: 'desk-broadcast', buildingId: house.id })} showChevron>Объявление этому дому</CellAction>
+        <CellAction onClick={() => setQr(true)} showChevron>QR-код для подъезда</CellAction>
         <CellAction onClick={onMove} showChevron>{house.latitude === null ? 'Поставить на карту' : 'Переместить точку'}</CellAction>
         {canSeeCode ? <CellAction onClick={() => void reveal()} showChevron>Код дома: показать или изменить</CellAction> : null}
         <CellAction onClick={() => navigation.push({ name: 'desk-apartments', buildingId: house.id, address: house.address })} showChevron>Квартиры: коды и договоры</CellAction>
         {isPlatform ? <CellAction mode="destructive" onClick={() => setTransfer(true)} showChevron>Передать другой УК</CellAction> : null}
       </Section>
+    </div>
+  );
+}
+
+// The QR code at the entrance: the bot opens with this house chosen, the
+// resident types the apartment and proves it with the code or the contract.
+// The code itself gives no access, so any staff member may show it.
+function HouseQrCard({ house, onBack }: { house: DeskBuilding; onBack: () => void }) {
+  const { showSnackbar } = useSnackbar();
+  const [link, setLink] = useState<string | null>(null);
+  const [svg, setSvg] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    api.desk.residentLink(house.id).then(async (value) => {
+      const image = await QRCode.toString(value.link, { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#111111', light: '#ffffff' } });
+      if (alive) { setLink(value.link); setSvg(image); }
+    }).catch((failure: unknown) => { if (alive) setError(errorText(failure)); });
+    return () => { alive = false; };
+  }, [house.id]);
+  // The printable poster lives in the web desk: a phone webview cannot print.
+  const openWeb = async () => {
+    try { bridge.openLink((await api.desk.webLink()).url); } catch (failure) { showSnackbar({ text: errorText(failure) }); }
+  };
+  return (
+    <div className="sheet">
+      <button type="button" className="back-link" onClick={onBack}>‹ Назад к дому</button>
+      <Typography.Title variant="medium-strong">QR-код для подъезда</Typography.Title>
+      <Typography.Body variant="small" className="muted">{house.address}</Typography.Body>
+      {error ? <div className="form-error" role="alert">{error}</div> : svg ? <div className="qr-preview" role="img" aria-label={`QR-код дома ${house.address}`} dangerouslySetInnerHTML={{ __html: svg }} /> : <Loading />}
+      <Typography.Body variant="small" className="muted">Житель наводит камеру — открывается бот «Домовед» в MAX, где этот дом уже выбран. Остаётся указать квартиру и подтвердить её кодом дома или номером договора. Сам QR-код доступа к квартире не даёт.</Typography.Body>
+      {link ? <span className="info-card-text chat-card-link">{link}</span> : null}
+      <Button size="large" stretched disabled={!link} onClick={async () => {
+        if (!link) return;
+        const result = await bridge.share(`Подключите квартиру ${house.address} к «Домоведу» в MAX: заявки в УК, объявления и опросы дома.`, link);
+        if (result === 'copied') showSnackbar({ text: 'Ссылка скопирована' });
+        if (result === 'failed') showSnackbar({ text: 'Не удалось поделиться ссылкой' });
+      }}>Поделиться ссылкой</Button>
+      <Button size="large" variant="secondary" stretched disabled={!link} onClick={async () => { if (link) showSnackbar({ text: (await bridge.copy(link)) ? 'Ссылка скопирована' : 'Не удалось скопировать ссылку' }); }}>Скопировать ссылку</Button>
+      <Button size="medium" variant="ghost" stretched onClick={() => void openWeb()}>Листовка для печати — в веб-пульте</Button>
     </div>
   );
 }

@@ -17,6 +17,7 @@ import { revokeAdminAccess } from '../auth/revoke-admin.js';
 import { buildingCodePattern } from '../buildings/access-code.js';
 import { hashInviteCode } from '../users/invite-code.js';
 import { env } from '../config/env.js';
+import { houseLink } from '../buildings/house-link.js';
 import { locateAddress } from '../registry/geosearch.js';
 import { quickDialOf, quickDialSchema } from '../companies/quick-dial.js';
 import { dutiesFor, dutiesSchema, platformDuties, saveCompanyDuties } from '../companies/duties.js';
@@ -142,6 +143,18 @@ companyRouter.get('/buildings/:id/code', requireMiniAppAdmin('supervisor'), asyn
     if (!building) { response.status(404).json({ code: 'building_not_found' }); return; }
     await writeAdminAudit(prisma, admin(response).id, 'building_code_revealed', 'building', building.id);
     response.json({ code: building.accessCode });
+  } catch (error) { next(error); }
+});
+
+// The link for the QR code at the entrance: the bot opens with this house chosen.
+companyRouter.get('/buildings/:id/resident-link', async (request, response, next) => {
+  try {
+    if (!z.string().uuid().safeParse(request.params.id).success) { response.status(404).json({ code: 'building_not_found' }); return; }
+    const building = await prisma.building.findFirst({ where: { id: String(request.params.id), companyId: companyOf(response) }, select: { id: true, address: true, company: { select: { name: true, phone: true } } } });
+    if (!building) { response.status(404).json({ code: 'building_not_found' }); return; }
+    const link = houseLink(building.id);
+    if (!link) { response.status(409).json({ code: 'bot_username_missing' }); return; }
+    response.json({ link, address: building.address, companyName: building.company.name, companyPhone: building.company.phone });
   } catch (error) { next(error); }
 });
 
