@@ -16,9 +16,12 @@ describe('local time of a company', () => {
     expect(zoneOf(null, null)).toBe('Europe/Moscow');
   });
 
-  it('signs the time as local with its offset', () => {
+  it('signs the time as local with its offset from Moscow', () => {
     const at = new Date('2026-10-23T12:34:00Z');
-    expect(offsetLabel(at, 'Asia/Yekaterinburg')).toBe('UTC+5');
-    expect(localTime(at, 'Asia/Yekaterinburg')).toContain('17:34 по местному времени (UTC+5)');
+    expect(offsetLabel(at, 'Asia/Yekaterinburg')).toBe('МСК+2');
+    expect(offsetLabel(at, 'Asia/Novosibirsk')).toBe('МСК+4');
+    expect(offsetLabel(at, 'Europe/Moscow')).toBe('МСК');
+    expect(offsetLabel(at, 'Europe/Kaliningrad')).toBe('МСК−1');
+    expect(localTime(at, 'Asia/Yekaterinburg')).toContain('17:34 по местному времени (МСК+2)');
   });
 });

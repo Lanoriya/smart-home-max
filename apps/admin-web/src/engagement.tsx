@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { api, ApiError, plural } from './api';
+import { zoneOffset } from './zones';
 
 // Polls of the company and the reception of citizens in the web desk: the
 // same as in the desk of the mini-app, on a big screen.
@@ -8,7 +9,6 @@ type Notify = (text: string, tone?: 'success' | 'error') => void;
 const app = (path: string) => `/api/app${path}`;
 // Times of polls and the reception are those of the city of the company.
 const zoned = (value: string | Date, zone: string, options: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) => new Date(value).toLocaleString('ru-RU', { ...options, timeZone: zone });
-const zoneOffset = (zone: string, at: Date = new Date()) => (new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'shortOffset' }).formatToParts(at).find((part) => part.type === 'timeZoneName')?.value ?? 'GMT').replace('GMT', 'UTC').replace(/^UTC$/, 'UTC+0');
 function zonedToUtc(date: string, time: string, zone: string) {
   const [year, month, day] = date.split('-').map(Number);
   const [hour, minute] = time.split(':').map(Number);

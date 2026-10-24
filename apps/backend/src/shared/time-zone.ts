@@ -49,15 +49,25 @@ export async function companyZone(companyId: string) {
   return zoneOf(house?.city, house?.longitude ?? company?.longitude);
 }
 
-// «23 октября, 17:34 по местному времени (UTC+5)».
+// «23 октября, 17:34 по местному времени (МСК+2)».
 export function localTime(date: Date, zone: string, withDay = true) {
   const text = date.toLocaleString('ru-RU', { timeZone: zone, ...(withDay ? { day: 'numeric', month: 'long' } : {}), hour: '2-digit', minute: '2-digit' });
   return `${text} по местному времени (${offsetLabel(date, zone)})`;
 }
 
-export function offsetLabel(date: Date, zone: string) {
-  const name = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'shortOffset' }).formatToParts(date).find((part) => part.type === 'timeZoneName')?.value ?? 'GMT';
-  return name.replace('GMT', 'UTC').replace(/^UTC$/, 'UTC+0');
+// Offset of the zone from Moscow time, the way people in Russia say it:
+// «МСК», «МСК+2», «МСК−1».
+export function offsetLabel(at: Date, zone: string) {
+  const minutes = (name: string) => {
+    const value = new Intl.DateTimeFormat('en-US', { timeZone: name, timeZoneName: 'shortOffset' }).formatToParts(at).find((part) => part.type === 'timeZoneName')?.value ?? 'GMT';
+    const match = /GMT([+-])(\d+)(?::(\d+))?/.exec(value);
+    return match ? (match[1] === '-' ? -1 : 1) * (Number(match[2]) * 60 + Number(match[3] ?? 0)) : 0;
+  };
+  const shift = minutes(zone) - minutes('Europe/Moscow');
+  if (!shift) return 'МСК';
+  const hours = Math.floor(Math.abs(shift) / 60);
+  const rest = Math.abs(shift) % 60;
+  return `МСК${shift > 0 ? '+' : '−'}${hours}${rest ? `:${String(rest).padStart(2, '0')}` : ''}`;
 }
 
 // «22.10.2026, 17:34» on the clock of the zone.

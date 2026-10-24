@@ -13,9 +13,19 @@ export function currentDeskZone() {
   return deskZone;
 }
 
+// Offset of the zone from Moscow time, the way people in Russia say it:
+// «МСК», «МСК+2», «МСК−1».
 export function zoneOffset(zone: string, at: Date = new Date()) {
-  const name = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'shortOffset' }).formatToParts(at).find((part) => part.type === 'timeZoneName')?.value ?? 'GMT';
-  return name.replace('GMT', 'UTC').replace(/^UTC$/, 'UTC+0');
+  const minutes = (name: string) => {
+    const value = new Intl.DateTimeFormat('en-US', { timeZone: name, timeZoneName: 'shortOffset' }).formatToParts(at).find((part) => part.type === 'timeZoneName')?.value ?? 'GMT';
+    const match = /GMT([+-])(\d+)(?::(\d+))?/.exec(value);
+    return match ? (match[1] === '-' ? -1 : 1) * (Number(match[2]) * 60 + Number(match[3] ?? 0)) : 0;
+  };
+  const shift = minutes(zone) - minutes('Europe/Moscow');
+  if (!shift) return 'МСК';
+  const hours = Math.floor(Math.abs(shift) / 60);
+  const rest = Math.abs(shift) % 60;
+  return `МСК${shift > 0 ? '+' : '−'}${hours}${rest ? `:${String(rest).padStart(2, '0')}` : ''}`;
 }
 
 // «2026-10-22T17:30» for <input type="datetime-local"> on the clock of the zone.

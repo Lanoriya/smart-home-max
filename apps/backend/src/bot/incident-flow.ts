@@ -1247,7 +1247,7 @@ export class IncidentFlow {
       ...cities.slice(0, buildingButtonsLimit).map((item) => [{ text: `${item.city} — ${item.count} ${pluralHouses(item.count)}`, payload: `city:choose:${item.anchorId}` }]),
       [{ text: 'Найти дом на карте', payload: 'map', openApp: true }],
       ...(await this.addressButtons(userId, 'list')),
-      ...await deskButton(maxUserId),
+      ...await deskButton(maxUserId, false),
     ]);
   }
 
@@ -1336,7 +1336,7 @@ export class IncidentFlow {
         ['Здесь можно сообщить о проблеме в управляющую компанию, следить за своими заявками и заявками дома, читать объявления УК и связаться с соседями.'],
         ['Если вы здесь впервые, загляните в «Возможности бота» — там коротко о каждом разделе.'],
       ),
-      [...mainMenuButtons(), ...(building?.chatLink ? [[{ text: 'Чат дома', payload: 'chat:open', url: building.chatLink }]] : []), ...await deskButton(maxUserId)],
+      [...mainMenuButtons(), ...(building?.chatLink ? [[{ text: 'Чат дома', payload: 'chat:open', url: building.chatLink }]] : []), ...await deskButton(maxUserId, true)],
     );
   }
 
@@ -2313,13 +2313,18 @@ function parseDraft(data: unknown): IncidentDraft | null {
 }
 
 // The web desk for those who work in it: company staff and the platform.
-async function deskButton(maxUserId: string): Promise<CallbackButton[][]> {
+// Without an apartment the menu has no "Открыть приложение", so staff get
+// their own button to the desk of the mini-app; the QR codes of houses wait
+// until the house and the apartment are chosen.
+async function deskButton(maxUserId: string, resident: boolean): Promise<CallbackButton[][]> {
   const admin = await prisma.admin.findUnique({ where: { maxUserId }, select: { companyId: true, role: true, legalReminders: true } });
   if (!admin || (!admin.companyId && admin.role !== 'platform_admin')) return [];
-  if (admin.role === 'platform_admin') return [[{ text: 'Веб-админка платформы', payload: 'desk:web' }]];
+  const app: CallbackButton[][] = resident ? [] : [[{ text: 'Открыть приложение', payload: 'desk', openApp: true }]];
+  if (admin.role === 'platform_admin') return [...app, [{ text: 'Веб-админка платформы', payload: 'desk:web' }]];
   return [
+    ...app,
     [{ text: 'Веб-диспетчерская УК', payload: 'desk:web' }],
-    [{ text: 'QR-коды домов', payload: 'staff:qr' }],
+    ...(resident ? [[{ text: 'QR-коды домов', payload: 'staff:qr' }]] : []),
     [{ text: admin.legalReminders ? 'Напоминания о сроках: вкл.' : 'Напоминания о сроках: выкл.', payload: 'staff:reminders' }],
   ];
 }
