@@ -12,6 +12,7 @@ import { maxWebhookRouter } from './routes/max-webhook.js';
 import { adminSessionRouter } from './routes/admin-session.js';
 import { photosRouter } from './routes/photos.js';
 import { buildingsRouter } from './routes/buildings.js';
+import { houseQrRouter } from './routes/house-qr.js';
 import { announcementsRouter } from './routes/announcements.js';
 import { emergencyServicesRouter } from './routes/emergency-services.js';
 import { apartmentsRouter } from './routes/apartments.js';
@@ -49,6 +50,7 @@ export function createApp() {
   app.use('/health', healthRouter);
   app.use('/webhooks/max', maxWebhookRouter);
   app.use('/api/photos', photosRouter);
+  app.use('/api/qr', houseQrRouter);
   app.use('/api/privacy', privacyRouter);
   app.use('/api/admin/session', adminSessionRouter);
   app.use('/api/incidents', incidentsRouter);

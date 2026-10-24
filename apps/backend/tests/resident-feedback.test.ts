@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { acceptanceOf, feedbackOpen, feedbackSchema, feedbackSummary, feedbackWindowDays } from '../src/incidents/resident-feedback.js';
 import { feedbackButtons, notificationText } from '../src/incidents/admin-incidents.js';
-import { houseFromStartPayload, houseLink } from '../src/buildings/house-link.js';
+import { houseFromStartPayload, houseLink, houseQrImageUrl, houseQrPng } from '../src/buildings/house-link.js';
 import { signFor } from '../src/bot/button-emoji.js';
 
 const day = 24 * 60 * 60 * 1000;
@@ -63,5 +63,13 @@ describe('the QR code of a house', () => {
     expect(houseFromStartPayload('house_123')).toBeNull();
     expect(houseFromStartPayload(`invite_${id}`)).toBeNull();
     expect(houseFromStartPayload(null)).toBeNull();
+  });
+
+  it('has a picture the bot can send by its address', async () => {
+    expect(houseQrImageUrl(id, 'https://example.ru/app/')).toBe(`https://example.ru/api/qr/house/${id}.png`);
+    expect(houseQrImageUrl(id, '')).toBeNull();
+    const png = await houseQrPng(houseLink(id, 'demo_bot')!);
+    expect(png.subarray(1, 4).toString()).toBe('PNG');
+    expect(png.length).toBeGreaterThan(1000);
   });
 });

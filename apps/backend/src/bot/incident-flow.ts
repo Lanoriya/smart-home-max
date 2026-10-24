@@ -38,6 +38,7 @@ import { canClearApartmentData, clearApartmentData } from '../residents/apartmen
 import { feedbackOpen, feedbackState, giveFeedback, type FeedbackResult } from '../incidents/resident-feedback.js';
 import { feedbackButtons } from '../incidents/admin-incidents.js';
 import { contractKey } from '../shared/contract.js';
+import { houseLink, houseQrImageUrl } from '../buildings/house-link.js';
 
 const sessionDataSchema = z.object({
   apartmentId: z.string().uuid().optional(),
@@ -602,6 +603,12 @@ export class IncidentFlow {
       return true;
     }
     if (payload === 'profile:view') { await this.showProfile(maxUserId, user.id); return true; }
+    if (payload === 'profile:house-qr') {
+      const membership = await this.getMembership(user.id);
+      if (!membership) { await this.showHome(maxUserId, user.id); return true; }
+      await this.sendHouseQr(maxUserId, { id: membership.apartment.buildingId, address: membership.apartment.building.address }, 'resident');
+      return true;
+    }
     if (payload === 'resident:message') {
       await this.saveSession(user.id, 'resident_message_apartment', {});
       await this.messenger.sendMessageToUser(maxUserId, 'Введите номер квартиры получателя в вашем доме.', flowButtons());
@@ -740,6 +747,10 @@ export class IncidentFlow {
         [bold(platform ? 'Веб-админка платформы' : 'Веб-диспетчерская УК')],
         ['Ссылка одноразовая и действует 5 минут. Откройте её на компьютере или в браузере телефона.'],
       ), [[{ text: platform ? 'Открыть веб-админку' : 'Открыть веб-диспетчерскую', payload: 'desk:web:open', url }], [{ text: 'В главное меню', payload: 'menu:main' }]]);
+      return true;
+    }
+    if (payload === 'staff:qr' || payload.startsWith('staff:qr:')) {
+      await this.showStaffQr(maxUserId, payload);
       return true;
     }
     if (payload === 'staff:reminders' || payload === 'staff:reminders:on' || payload === 'staff:reminders:off') {
@@ -1352,9 +1363,79 @@ export class IncidentFlow {
     ), [
       [me?.sharedPhone ? { text: 'Убрать мой номер', payload: 'contact:remove' } : { text: 'Поделиться номером', payload: 'contact:share', requestContact: true }],
       [{ text: 'Автомобили', payload: 'hh:cars' }],
+      [{ text: 'QR-код дома для соседей', payload: 'profile:house-qr' }],
       [{ text: 'Сменить адрес или отвязаться', payload: 'apartment:change' }],
       [{ text: 'В главное меню', payload: 'menu:main' }],
     ]);
+  }
+
+  // QR codes of the company's houses for the entrances, right in the chat:
+  // a house is chosen from the list, the code comes as a picture.
+  private async showStaffQr(maxUserId: string, payload: string) {
+    const admin = await prisma.admin.findUnique({ where: { maxUserId }, select: { companyId: true } });
+    if (!admin?.companyId) {
+      await this.messenger.sendMessageToUser(maxUserId, 'QR-коды домов доступны сотрудникам УК.', mainMenuLinkButtons());
+      return;
+    }
+    const houses = (await prisma.building.findMany({ where: { companyId: admin.companyId }, select: buildingChoiceSelect })).sort(compareBuildings);
+    const chosen = /^staff:qr:house:([0-9a-f-]{36})$/.exec(payload)?.[1];
+    const house = chosen ? houses.find((item) => item.id === chosen) : houses.length === 1 ? houses[0] : undefined;
+    if (house) { await this.sendHouseQr(maxUserId, house, 'staff', houses.length > 1); return; }
+    if (!houses.length) {
+      await this.messenger.sendMessageToUser(maxUserId, blocks([bold('QR-коды домов')], ['У вашей УК пока нет домов. Добавьте их в приложении или в веб-диспетчерской.']), mainMenuLinkButtons());
+      return;
+    }
+    const pages = Math.max(1, Math.ceil(houses.length / housesPerPage));
+    const page = Math.min(Math.max(Number(/^staff:qr:page:(d+)$/.exec(payload)?.[1] ?? 1), 1), pages);
+    const navigation: CallbackButton[] = [
+      ...(page > 1 ? [{ text: 'Предыдущие дома', payload: `staff:qr:page:${page - 1}` }] : []),
+      ...(page < pages ? [{ text: 'Следующие дома', payload: `staff:qr:page:${page + 1}` }] : []),
+    ];
+    await this.messenger.sendMessageToUser(maxUserId, blocks(
+      [bold('QR-коды домов')],
+      [chosen ? 'Этого дома больше нет в вашей УК. Выберите дом из списка.' : 'Выберите дом — пришлю QR-код для подъезда картинкой. Его можно распечатать или переслать в чат дома.'],
+      [pageLine(page, pages, houses.length)],
+    ), [
+      ...houses.slice((page - 1) * housesPerPage, page * housesPerPage).map((item) => [{ text: item.address, payload: `staff:qr:house:${item.id}` }]),
+      ...(navigation.length ? [navigation] : []),
+      [{ text: 'В главное меню', payload: 'menu:main' }],
+    ]);
+  }
+
+  // The QR code of one house as a picture with its link: for the company to
+  // print at the entrance, for a resident to show the neighbours.
+  private async sendHouseQr(maxUserId: string, house: { id: string; address: string }, audience: 'staff' | 'resident', moreHouses = false) {
+    const link = houseLink(house.id);
+    if (!link) {
+      await this.messenger.sendMessageToUser(maxUserId, 'QR-код пока недоступен: не задано имя бота. Сообщите администратору сервиса.', mainMenuLinkButtons());
+      return;
+    }
+    const text = audience === 'staff'
+      ? blocks(
+        [bold('QR-код для подъезда'), house.address],
+        ['Распечатайте и повесьте у входа или у лифта, или перешлите это сообщение в чат дома. Житель наводит камеру — открывается этот бот, где дом уже выбран. Остаётся указать квартиру и подтвердить её кодом дома или номером договора.'],
+        ['Сам QR-код доступа к квартире не даёт. Листовка A4 для печати — в веб-диспетчерской, раздел «Дома».'],
+        [link],
+      )
+      : blocks(
+        [bold('QR-код вашего дома'), house.address],
+        ['Покажите его соседям или перешлите это сообщение в чат дома. Сосед наводит камеру — бот откроется сразу с вашим домом. Останется указать квартиру и подтвердить её кодом дома или номером договора.'],
+        [link],
+      );
+    const buttons: CallbackButton[][] = audience === 'staff'
+      ? [[{ text: 'Листовка для печати', payload: 'desk:web' }], ...(moreHouses ? [[{ text: 'Другие дома', payload: 'staff:qr' }]] : []), [{ text: 'В главное меню', payload: 'menu:main' }]]
+      : [[{ text: 'Моя квартира', payload: 'profile:view' }], [{ text: 'В главное меню', payload: 'menu:main' }]];
+    const image = houseQrImageUrl(house.id);
+    if (image) {
+      try {
+        await this.messenger.sendMessageToUser(maxUserId, text, buttons, [{ token: '', url: image }]);
+        return;
+      } catch (error) {
+        // MAX could not take the picture: the link still does the job.
+        logger.warn({ error, buildingId: house.id }, 'MAX refused the house QR picture, sending the link only');
+      }
+    }
+    await this.messenger.sendMessageToUser(maxUserId, text, buttons);
   }
 
   private async showMyIncidents(maxUserId: string, userId: string, archive: boolean, requestedPage = 1) {
@@ -2238,6 +2319,7 @@ async function deskButton(maxUserId: string): Promise<CallbackButton[][]> {
   if (admin.role === 'platform_admin') return [[{ text: 'Веб-админка платформы', payload: 'desk:web' }]];
   return [
     [{ text: 'Веб-диспетчерская УК', payload: 'desk:web' }],
+    [{ text: 'QR-коды домов', payload: 'staff:qr' }],
     [{ text: admin.legalReminders ? 'Напоминания о сроках: вкл.' : 'Напоминания о сроках: выкл.', payload: 'staff:reminders' }],
   ];
 }
@@ -2376,8 +2458,8 @@ function pageLine(page: number, pages: number, total: number) {
 // choosing an address and answering or cancelling a join request.
 const menuLater = 'Главное меню откроется, когда вы выберете дом и квартиру — здесь или в приложении.';
 
-const openPayloads = new Set(['menu:main', 'flow:cancel', 'uk:contacts', 'uk:duties', 'emergency:services', 'bot:info', 'address:search', 'address:browse', 'city:change', 'desk:web', 'staff:reminders', 'staff:reminders:on', 'staff:reminders:off', 'apartment:change', 'apartment:change:confirm', 'join:cancel', 'join:status']);
-const openPrefixes = ['consent:accept:', 'building:choose:', 'city:choose:', 'street:choose:', 'join:approve:', 'join:reject:', 'incident:accept:', 'incident:rate:', 'incident:reopen:', 'incident:reopen-now:'];
+const openPayloads = new Set(['menu:main', 'flow:cancel', 'uk:contacts', 'uk:duties', 'emergency:services', 'bot:info', 'address:search', 'address:browse', 'city:change', 'desk:web', 'staff:reminders', 'staff:reminders:on', 'staff:reminders:off', 'staff:qr', 'apartment:change', 'apartment:change:confirm', 'join:cancel', 'join:status']);
+const openPrefixes = ['staff:qr:', 'consent:accept:', 'building:choose:', 'city:choose:', 'street:choose:', 'join:approve:', 'join:reject:', 'incident:accept:', 'incident:rate:', 'incident:reopen:', 'incident:reopen-now:'];
 function opensWithoutAddress(payload: string) {
   return openPayloads.has(payload) || openPrefixes.some((prefix) => payload.startsWith(prefix));
 }
