@@ -64,6 +64,8 @@ function entryFor(startParam: string | null, hasDesk: boolean, isPlatform: boole
   const desk = /^desk_(\d+)$/.exec(startParam);
   if (desk && hasDesk) return { tab: 'desk', stack: [{ name: 'desk' }, { name: 'desk-incident', id: `number:${desk[1]}` }] };
   if (startParam === 'map') return { tab: 'map' };
+  const house = /^house_([0-9a-f-]{36})$/.exec(startParam);
+  if (house) return { tab: 'map', stack: [{ name: 'map', focusBuildingId: house[1]! }] };
   if (startParam === 'neighbours') return { tab: 'neighbours' };
   if (startParam === 'polls' || /^poll_[0-9a-f-]{36}$/.test(startParam)) return { tab: 'polls' };
   if (startParam === 'appointments') return { tab: 'home', stack: [{ name: 'home' }, { name: 'appointments' }] };

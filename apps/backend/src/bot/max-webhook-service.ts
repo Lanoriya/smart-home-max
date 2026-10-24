@@ -4,6 +4,7 @@ import { prisma } from '../shared/prisma.js';
 import { logger } from '../shared/logger.js';
 import { IncidentFlow } from './incident-flow.js';
 import { ScreenMessenger } from './screen-messenger.js';
+import { houseFromStartPayload } from '../buildings/house-link.js';
 
 export class MaxWebhookService {
   constructor(private readonly messenger: Messenger) {}
@@ -64,6 +65,12 @@ export class MaxWebhookService {
           [{ text: 'Принять приглашение', payload: startPayload, openApp: true }],
           [{ text: 'В главное меню', payload: 'menu:main' }],
         ]);
+        return;
+      }
+      // https://max.ru/<bot>?start=house_<id> — the QR code at the entrance.
+      const houseId = houseFromStartPayload(startPayload);
+      if (houseId) {
+        await incidentFlow.startAtHouse(userId, houseId);
         return;
       }
       await incidentFlow.start(userId);

@@ -64,6 +64,22 @@ export async function alertNewIncident(tx: Tx, incidentId: string) {
   });
 }
 
+// A resident said the problem of a resolved incident is still there: the
+// incident is back in work and the company hears it at once.
+export async function alertReopenedIncident(tx: Tx, incidentId: string, apartmentNumber: string | null, comment: string | null) {
+  const { incident, recipients } = await companyAdminsOf(tx, incidentId);
+  if (!recipients.length) return;
+  const text = blocks(
+    [bold(`↩️ Заявка № ${incident.number} снова в работе`), incident.building.address],
+    [incident.title],
+    [`${apartmentNumber ? `Житель квартиры ${apartmentNumber}` : 'Житель'} сообщил, что проблема не устранена.`],
+    comment ? [bold('Что не так'), comment] : [],
+  ).value;
+  await tx.outboxMessage.createMany({
+    data: recipients.map((userId) => ({ incidentId, type: 'company_reopened', payload: { userId, text, format: 'html', buttons: deskButtons(incident.number) } })),
+  });
+}
+
 // Called after a resident joined a common incident. Raises the priority when
 // the number of residents reaches a step and tells the company once per step.
 export async function escalateIfNeeded(tx: Tx, incidentId: string) {

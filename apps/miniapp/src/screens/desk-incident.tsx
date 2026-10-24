@@ -78,7 +78,7 @@ export function DeskIncidentScreen({ reference }: { reference: string }) {
     }
   };
 
-  const updates = incident.events.filter((event) => event.type === 'incident_updated' || event.type === 'incident_escalated');
+  const updates = incident.events.filter((event) => ['incident_updated', 'incident_escalated', 'resident_reopened', 'incident_registered_by_phone'].includes(event.type));
   // A date the person typed by hand: not in the past, not later than 3 years,
   // a year of four digits.
   const dueProblem = !due ? null
@@ -103,7 +103,22 @@ export function DeskIncidentScreen({ reference }: { reference: string }) {
         <Button size="large" variant="ghost" stretched onClick={() => setPending('comment')}>Сообщение жителям или срок</Button>
       </Actions>
 
+      {incident.source === 'phone' ? (
+        <Section header="Принята по телефону">
+          <CellSimple title={<span className="pre-wrap">{incident.callNote ?? incident.title}</span>} subtitle={[incident.callerName, incident.callerPhone].filter(Boolean).join(', ') || 'Звонивший не представился'} />
+        </Section>
+      ) : null}
+      {incident.feedback.length ? (
+        <Section header={`Ответ жителей: решено ${incident.feedbackSummary.confirmed}, не решено ${incident.feedbackSummary.returned}${incident.feedbackSummary.ratingAverage ? `, оценка ${incident.feedbackSummary.ratingAverage}` : ''}`}>
+          {incident.feedback.map((item) => (
+            <CellSimple key={item.id} overline={`${item.apartment ? `Кв. ${item.apartment.number}` : 'Житель'}, ${ago(item.updatedAt)}`}
+              title={item.resolved ? `Решено${item.rating ? ` · ${'★'.repeat(item.rating)}` : ''}` : 'Не решено — вернул в работу'}
+              {...(item.comment ? { subtitle: <span className="pre-wrap">{item.comment}</span> } : {})} />
+          ))}
+        </Section>
+      ) : null}
       <Section header="Что пишут жители">
+        {incident.reports.length === 0 ? <CellSimple subtitle="Жителей этой квартиры пока нет в сервисе: о ходе работ сообщите звонившему сами." /> : null}
         {incident.reports.map((report) => (
           <CellSimple key={report.id} overline={`${report.apartment ? `Кв. ${report.apartment.number}` : 'Житель'}, ${ago(report.createdAt)}`} title={<span className="pre-wrap">{report.description || 'Присоединился: у него та же проблема'}</span>} />
         ))}
@@ -118,6 +133,8 @@ export function DeskIncidentScreen({ reference }: { reference: string }) {
         <Section header="История">
           {updates.slice().reverse().map((event) => {
             const payload = event.payload as { newStatus?: Status; publicComment?: string | null; reports?: number; priority?: string };
+            if (event.type === 'resident_reopened') return <CellSimple key={event.id} overline={formatDate(event.createdAt, zone)} title="Житель вернул в работу" subtitle={(event.payload as { comment?: string | null }).comment ?? 'Проблема не решена'} />;
+            if (event.type === 'incident_registered_by_phone') return <CellSimple key={event.id} overline={formatDate(event.createdAt, zone)} title="Принята по телефону" />;
             return event.type === 'incident_escalated'
               ? <CellSimple key={event.id} overline={formatDate(event.createdAt, zone)} title={`Уже ${payload.reports} ${plural(payload.reports ?? 0, 'житель', 'жителя', 'жителей')}`} subtitle="Приоритет поднят автоматически" />
               : <CellSimple key={event.id} overline={formatDate(event.createdAt, zone)} title={payload.newStatus ? statusLabels[payload.newStatus] : 'Обновление'} subtitle={payload.publicComment ?? undefined} />;

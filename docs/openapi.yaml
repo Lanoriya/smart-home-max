@@ -61,6 +61,31 @@ paths:
         - { name: street, in: query, schema: { type: string }, description: Только заявки домов одной улицы }
         - { name: number, in: query, schema: { type: integer, minimum: 1 }, description: 'Поиск по сквозному номеру заявки; игнорирует archive и фильтры адреса' }
       responses: { '200': { description: Список, content: { application/json: { schema: { $ref: '#/components/schemas/IncidentList' } } } }, '401': { $ref: '#/components/responses/Unauthorized' } }
+    post:
+      security: [{ cookieAuth: [] }]
+      summary: Заявка по телефонному звонку
+      description: Диспетчер заводит заявку за жителя. Статус «Принята», source=phone. Жители указанной квартиры, подключённые к боту, получают заявку в MAX и становятся её участниками. Имя и телефон звонившего видят только сотрудники УК.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [buildingId, category, locationZone, description]
+              properties:
+                buildingId: { type: string, format: uuid }
+                category: { type: string, enum: [water, electricity, heating, elevator, leak, cleaning, other] }
+                locationZone: { type: string, enum: [apartment, entrance, elevator, yard, common] }
+                entranceNumber: { type: integer, minimum: 1, nullable: true, description: Обязателен для entrance и elevator }
+                apartmentNumber: { type: string, nullable: true, description: Обязателен для apartment }
+                description: { type: string, minLength: 5, maxLength: 1000 }
+                priority: { type: string, enum: [normal, high, emergency], default: normal }
+                callerName: { type: string, nullable: true }
+                callerPhone: { type: string, nullable: true }
+      responses:
+        '201': { description: 'item (id, number), notified — сколько жителей получили заявку в MAX' }
+        '400': { description: 'apartment_required, entrance_required, zone_not_for_category, invalid_phone' }
+        '404': { description: 'building_not_found, apartment_not_found' }
   /api/incidents/{id}:
     get:
       security: [{ cookieAuth: [] }]
@@ -180,6 +205,13 @@ paths:
       description: Операция записывается в административный аудит.
       requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, phone], properties: { name: { type: string }, phone: { type: string }, email: { type: string, nullable: true }, address: { type: string, nullable: true }, workingHours: { type: string, nullable: true }, note: { type: string, nullable: true } } } } } }
       responses: { '200': { description: Контакты сохранены }, '400': { description: Ошибка DTO } }
+  /api/buildings/{id}/resident-link:
+    get:
+      security: [{ cookieAuth: [] }]
+      summary: Ссылка дома для QR-кода в подъезде
+      description: https://max.ru/<бот>?start=house_<id> — бот открывается с выбранным домом. Доступа к квартире ссылка не даёт.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: 'link, address, companyName, companyPhone' }, '404': { $ref: '#/components/responses/NotFound' }, '409': { description: bot_username_missing } }
   /api/buildings/{id}/access-code:
     get:
       security: [{ cookieAuth: [] }]
@@ -269,6 +301,27 @@ paths:
       responses:
         '200': { description: Заявка, ход работ, обсуждение }
         '404': { $ref: '#/components/responses/NotFound' }
+  /api/app/incidents/{id}/feedback:
+    post:
+      summary: Ответ жителя после «Устранена»
+      description: 'resolved=true — подтвердить результат и при желании оценить (rating 1–5). resolved=false — заявка возвращается в работу, сотрудники получают сообщение; comment увидят только они. Доступно участникам заявки 14 дней после «Устранена».'
+      security: [{ maxWebApp: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resolved]
+              properties:
+                resolved: { type: boolean }
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                comment: { type: string, maxLength: 500 }
+      responses:
+        '200': { description: reopened — вернулась ли заявка в работу }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: feedback_closed — заявка не устранена или прошло больше 14 дней }
   /api/app/incidents/{id}/join:
     post:
       summary: «У меня то же самое» — присоединиться к общей заявке

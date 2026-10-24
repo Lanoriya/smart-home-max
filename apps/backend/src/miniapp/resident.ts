@@ -24,6 +24,7 @@ import { unvotedPolls } from '../polls/polls.js';
 import { buildingZone, companyZone } from '../shared/time-zone.js';
 import { codeAttemptsLeft, registerCodeFailure } from '../residents/code-attempts.js';
 import { canClearApartmentData, clearApartmentData } from '../residents/apartment-data.js';
+import { feedbackSchema, feedbackState, giveFeedback } from '../incidents/resident-feedback.js';
 
 // What a resident does in the mini-app. The rules are the bot's rules: the
 // same codes, the same shared incidents, the same privacy of apartment issues.
@@ -323,7 +324,7 @@ async function visibleIncident(userId: string, where: Prisma.IncidentWhereInput)
     include: {
       building: { select: { address: true, city: true, longitude: true } },
       reports: { orderBy: { createdAt: 'asc' }, select: { authorUserId: true, description: true, createdAt: true, apartment: { select: { number: true } } } },
-      events: { where: { type: 'incident_updated' }, orderBy: { createdAt: 'asc' }, select: { payload: true, createdAt: true } },
+      events: { where: { type: { in: ['incident_updated', 'resident_reopened', 'incident_registered_by_phone'] } }, orderBy: { createdAt: 'asc' }, select: { type: true, payload: true, createdAt: true } },
       comments: { orderBy: { createdAt: 'asc' }, take: 50, select: { id: true, text: true, createdAt: true, authorUserId: true, apartment: { select: { number: true } } } },
       photos: { where: { url: { not: null } }, orderBy: { createdAt: 'asc' }, select: { id: true, url: true } },
     },
@@ -343,6 +344,7 @@ residentRouter.get('/incidents/:ref', async (request, response, next) => {
     const mine = incident.reports.find((report) => report.authorUserId === user.id);
     const isClosed = incident.status === 'resolved' || incident.status === 'rejected';
     const timeZone = buildingZone(incident.building);
+    const feedback = await feedbackState(user.id, incident, Boolean(mine));
     response.json({
       item: {
         id: incident.id,
@@ -368,8 +370,15 @@ residentRouter.get('/incidents/:ref', async (request, response, next) => {
         canJoin: !mine && !isClosed && !incident.archivedAt && incident.locationZone !== 'apartment',
         canCancel: Boolean(mine) && !isClosed,
         canComment: incident.locationZone !== 'apartment' && !incident.archivedAt,
+        byPhone: incident.source === 'phone',
+        // "Is the problem gone?" after the company marked it resolved.
+        feedback,
         // What the company said and did, in order: the status line of the card.
+        // The words of a resident who returned the incident stay with the
+        // company: neighbours see only that it went back to work.
         timeline: incident.events.map((event) => {
+          if (event.type === 'resident_reopened') return { at: event.createdAt, status: 'in_progress', comment: 'Житель сообщил, что проблема не решена', dueAt: null, delayReason: null };
+          if (event.type === 'incident_registered_by_phone') return { at: event.createdAt, status: 'acknowledged', comment: 'Диспетчер принял заявку по телефону', dueAt: null, delayReason: null };
           const payload = event.payload as { newStatus?: string; publicComment?: string | null; newDueAt?: string | null; delayReason?: string | null };
           return { at: event.createdAt, status: payload.newStatus ?? null, comment: payload.publicComment ?? null, dueAt: payload.newDueAt ?? null, delayReason: payload.delayReason ?? null };
         }),
@@ -480,6 +489,19 @@ residentRouter.post('/incidents/:id/cancel', async (request, response, next) => 
       ? (await prisma.incidentComment.deleteMany({ where: { incidentId: id.data, authorUserId: user.id } })).count
       : 0;
     response.json({ ...result, commentsDeleted: removed });
+  } catch (error) { next(error); }
+});
+
+// The resident confirms the result (and may rate it) or returns the incident.
+residentRouter.post('/incidents/:id/feedback', async (request, response, next) => {
+  try {
+    const id = z.string().uuid().safeParse(request.params.id);
+    if (!id.success) { response.status(404).json({ code: 'incident_not_found' }); return; }
+    const parsed = feedbackSchema.safeParse(request.body);
+    if (!parsed.success) { response.status(400).json({ code: 'invalid_feedback' }); return; }
+    const result = await giveFeedback(miniApp(response).user.id, id.data, parsed.data);
+    if (!result.ok) { response.status(result.code === 'incident_not_found' ? 404 : 409).json({ code: result.code }); return; }
+    response.json({ reopened: result.reopened });
   } catch (error) { next(error); }
 });
 

@@ -49,7 +49,8 @@ export type IncidentDetail = {
   id: string; number: number; title: string; category: Category; locationZone: Zone; entranceNumber: number | null; apartmentNumber: string | null;
   status: Status; priority: Priority; dueAt: string | null; delayReason: string | null; rejectionReason: string | null; address: string;
   createdAt: string; resolvedAt: string | null; reportsCount: number; myDescription: string | null; legalTerm: LegalTerm; timeZone: string;
-  joined: boolean; canJoin: boolean; canCancel: boolean; canComment: boolean;
+  joined: boolean; canJoin: boolean; canCancel: boolean; canComment: boolean; byPhone: boolean;
+  feedback: { canAnswer: boolean; until: string | null; answer: { resolved: boolean; rating: number | null; comment: string | null; at: string } | null };
   timeline: Array<{ at: string; status: Status | null; comment: string | null; dueAt: string | null; delayReason: string | null }>;
   comments: Array<{ id: string; text: string; createdAt: string; apartmentNumber: string | null; mine: boolean }>;
   photos: Array<{ id: string; url: string }>;
@@ -81,6 +82,7 @@ export type Stats = {
   open: number; newOnes: number; overdue: number; reactionMinutesMedian: number | null; resolveHoursMedian: number | null;
   onTimeShare: number | null; residents: number; buildings: number; buildingsOnMap: number;
   topCategories: Array<{ category: Category; count: number }>;
+  resolvedCount: number; confirmedShare: number | null; confirmedCount: number; reopenedCount: number; ratingAverage: number | null; ratingsCount: number; phoneIncidents: number;
 };
 
 export type DeskIncident = {
@@ -93,6 +95,9 @@ export type DeskIncidentDetail = {
   id: string; number: number; title: string; category: Category; locationZone: Zone; entranceNumber: number | null; apartmentNumber: string | null;
   status: Status; priority: Priority; dueAt: string | null; delayReason: string | null; rejectionReason: string | null; version: number;
   createdAt: string; building: { address: string }; legalTerm: LegalTerm; timeZone: string;
+  source: 'resident' | 'phone'; callerName: string | null; callerPhone: string | null; callNote: string | null;
+  feedback: Array<{ id: string; resolved: boolean; rating: number | null; comment: string | null; updatedAt: string; apartment: { number: string } | null }>;
+  feedbackSummary: { confirmed: number; returned: number; ratingAverage: number | null };
   reports: Array<{ id: string; description: string; createdAt: string; apartment: { number: string } | null; author: { displayName: string | null } }>;
   events: Array<{ id: string; type: string; payload: Record<string, unknown>; createdAt: string }>;
   comments: Array<{ id: string; text: string; createdAt: string; apartment: { number: string } | null }>;
@@ -185,6 +190,7 @@ export const api = {
   cancelIncident: (id: string, deleteComments = false) => request<{ reportsLeft: number; commentsDeleted: number }>('POST', `/incidents/${id}/cancel`, { deleteComments }),
   deleteComment: (id: string, commentId: string) => request<void>('DELETE', `/incidents/${id}/comments/${commentId}`),
   comment: (id: string, text: string) => request<unknown>('POST', `/incidents/${id}/comments`, { text }),
+  feedback: (id: string, answer: { resolved: true; rating?: number } | { resolved: false; comment?: string }) => request<{ reopened: boolean }>('POST', `/incidents/${id}/feedback`, answer),
   announcements: () => request<{ items: Announcement[] }>('GET', '/announcements').then((data) => data.items),
   markAnnouncementsRead: (ids?: string[]) => request<void>('POST', '/announcements/read', ids ? { ids } : {}),
   unread: () => request<{ incidents: number; announcements: number; emergencies: number; polls: number }>('GET', '/unread'),
@@ -304,6 +310,7 @@ export function errorText(error: unknown): string {
     invalid_company: 'Проверьте поля: название и телефон обязательны.',
     invalid_building: 'Проверьте адрес и числа квартир и подъездов.',
     cannot_cancel: 'Эту заявку уже нельзя отменить.',
+    feedback_closed: 'Ответ уже не принимается: заявка снова в работе или закрыта больше 14 дней назад.',
     invalid_plate: 'Введите госномер, например А123ВС96.',
     invalid_message: 'Проверьте номер квартиры и текст: от 2 до 1000 символов.',
     no_recipients: 'В этой квартире нет подключённых жителей. Укажите другую квартиру вашего дома.',

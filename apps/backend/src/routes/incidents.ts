@@ -10,6 +10,7 @@ import {
   updateIncident,
 } from '../incidents/admin-incidents.js';
 import { requireUuidParams } from '../shared/params.js';
+import { createPhoneIncident, phoneIncidentSchema } from '../incidents/phone-intake.js';
 
 export { canTransition, notificationText } from '../incidents/admin-incidents.js';
 
@@ -22,6 +23,20 @@ incidentsRouter.get('/', async (request, response, next) => {
     const filters = listFiltersSchema.safeParse(request.query);
     if (!filters.success) { response.status(400).json({ code: 'invalid_incident_filter' }); return; }
     response.json({ items: await listIncidents(response.locals.companyId, filters.data) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// A dispatcher registers an incident from a phone call.
+incidentsRouter.post('/', async (request, response, next) => {
+  try {
+    const parsed = phoneIncidentSchema.safeParse(request.body);
+    if (!parsed.success) { response.status(400).json({ code: 'invalid_incident', details: parsed.error.flatten() }); return; }
+    const result = await createPhoneIncident(response.locals.admin as AdminActor, response.locals.companyId, parsed.data);
+    if (!result.ok) { response.status(result.code === 'building_not_found' || result.code === 'apartment_not_found' ? 404 : 400).json({ code: result.code }); return; }
+    const { ok: _ok, ...body } = result;
+    response.status(201).json(body);
   } catch (error) {
     next(error);
   }

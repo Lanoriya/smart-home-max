@@ -4,7 +4,7 @@ import { api, errorText, type IncidentDetail, type Status } from '../api';
 import { bridge } from '../bridge';
 import { useNavigation } from '../nav';
 import { useLoad, useSession } from '../session';
-import { Actions, Empty, Failure, IncidentCell, Loading, Page, Plate, Section, StatusChip, Chips, PhotoStrip } from '../components/ui';
+import { Actions, Empty, Failure, Field, IncidentCell, Loading, Page, Plate, Section, Sheet, StatusChip, Chips, PhotoStrip } from '../components/ui';
 import { useConfirm } from '../components/confirm';
 import { useUnread } from '../unread';
 import { CategoryTile, IconTile } from '../components/icons';
@@ -74,6 +74,48 @@ function IncidentList() {
   );
 }
 
+// After "resolved": the resident confirms the result and rates it, or
+// returns the incident to work.
+function Feedback({ incident, busy, onConfirm, onReturn }: { incident: IncidentDetail; busy: string | null; onConfirm: (rating?: number) => void; onReturn: () => void }) {
+  const { answer, canAnswer, until } = incident.feedback;
+  if (answer && !answer.resolved) {
+    return <Section header="Ваш ответ"><CellSimple title="Не решено" subtitle="Вы вернули заявку в работу. Новый статус придёт в чат с ботом." /></Section>;
+  }
+  if (answer) {
+    return (
+      <Section header="Ваш ответ">
+        <CellSimple title="Проблема решена" subtitle={answer.rating ? `Ваша оценка работы УК: ${answer.rating} из 5` : 'Оцените работу УК — это поможет ей работать лучше'} />
+        {canAnswer ? (
+          <div className="feedback-box">
+            <Stars value={answer.rating} disabled={busy === 'feedback'} onPick={onConfirm} />
+            <Button size="small" variant="ghost" onClick={onReturn}>Всё-таки не решено</Button>
+          </div>
+        ) : null}
+      </Section>
+    );
+  }
+  return (
+    <Section header="Проблема действительно решена?">
+      <CellSimple subtitle={`УК отметила заявку как устранённую. Если это не так, верните её в работу${until ? ` — до ${formatDate(until, incident.timeZone)}` : ''}.`} />
+      <div className="feedback-box feedback-actions">
+        <Button size="medium" stretched loading={busy === 'feedback'} onClick={() => onConfirm()}>Да, решено</Button>
+        <Button size="medium" stretched variant="secondary" onClick={onReturn}>Не решено</Button>
+      </div>
+    </Section>
+  );
+}
+
+function Stars({ value, disabled, onPick }: { value: number | null; disabled: boolean; onPick: (rating: number) => void }) {
+  return (
+    <div className="stars" role="radiogroup" aria-label="Оценка работы УК">
+      {[1, 2, 3, 4, 5].map((rating) => (
+        <button key={rating} type="button" role="radio" aria-checked={value === rating} aria-label={`${rating} из 5`} disabled={disabled}
+          className={value !== null && rating <= value ? 'star star-on' : 'star'} onClick={() => onPick(rating)}>★</button>
+      ))}
+    </div>
+  );
+}
+
 const progressSteps: Status[] = ['new', 'acknowledged', 'in_progress', 'resolved'];
 
 function Progress({ status }: { status: Status }) {
@@ -99,6 +141,9 @@ export function IncidentScreen({ reference }: { reference: string | number }) {
   const confirm = useConfirm();
   const [comment, setComment] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
+  // "Not solved": what is still wrong, optional, for the dispatcher.
+  const [returning, setReturning] = useState(false);
+  const [problem, setProblem] = useState('');
 
   if (card.error) return <Failure text={card.error} retry={card.reload} />;
   if (!card.data) return <Loading />;
@@ -138,6 +183,21 @@ export function IncidentScreen({ reference }: { reference: string | number }) {
         {incident.rejectionReason ? <CellSimple title="Причина отклонения" subtitle={incident.rejectionReason} /> : null}
         {incident.myDescription ? <CellSimple title="Ваше описание" subtitle={incident.myDescription} /> : null}
       </Section>
+
+      {incident.feedback.canAnswer || incident.feedback.answer ? (
+        <Feedback incident={incident} busy={busy}
+          onConfirm={(rating) => void act('feedback', () => api.feedback(incident.id, rating ? { resolved: true, rating } : { resolved: true }), rating ? 'Спасибо за оценку!' : 'Спасибо, что подтвердили!')}
+          onReturn={() => setReturning(true)} />
+      ) : null}
+
+      <Sheet open={returning} onClose={() => { setReturning(false); setProblem(''); }} title="Проблема не решена">
+        <div className="sheet form">
+          <Field label="Что осталось не так" hint="Необязательно. Увидит только диспетчер УК">
+            <Textarea rows={3} maxLength={500} value={problem} onChange={(event) => setProblem(event.target.value)} placeholder="Например: батарея снова холодная с утра" />
+          </Field>
+          <Button size="large" stretched variant="destructive" loading={busy === 'reopen'} onClick={() => void act('reopen', () => api.feedback(incident.id, problem.trim() ? { resolved: false, comment: problem.trim() } : { resolved: false }), 'Заявка вернулась в работу. УК получила уведомление.').then(() => { setReturning(false); setProblem(''); })}>Вернуть заявку в работу</Button>
+        </div>
+      </Sheet>
 
       <Actions>
         {incident.canJoin ? (

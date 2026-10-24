@@ -25,6 +25,13 @@ enum IncidentStatus {
   rejected
 }
 
+// How the incident reached the company: a resident in MAX, or a phone call
+// the dispatcher registered on the desk.
+enum IncidentSource {
+  resident
+  phone
+}
+
 enum IncidentPriority {
   low
   normal
@@ -87,6 +94,7 @@ model User {
   codeAttempts  CodeAttempt[]
   pollVotes     PollVote[]
   appointments  Appointment[]
+  incidentFeedback IncidentFeedback[]
 
   @@map("users")
 }
@@ -280,6 +288,7 @@ model Apartment {
   joinRequests   ApartmentJoinRequest[]
   pollVotes      PollVote[]
   appointments   Appointment[]
+  incidentFeedback IncidentFeedback[]
 
   @@unique([buildingId, number])
   @@map("apartments")
@@ -391,6 +400,12 @@ model Incident {
   resolvedAt      DateTime?              @map("resolved_at") @db.Timestamptz(3)
   // First time the company reacted (took the incident out of "new").
   acknowledgedAt  DateTime?              @map("acknowledged_at") @db.Timestamptz(3)
+  source          IncidentSource         @default(resident)
+  // A phone call: who called and what they said, as the dispatcher wrote it.
+  // Seen by the company only.
+  callerName      String?                @map("caller_name")
+  callerPhone     String?                @map("caller_phone")
+  callNote        String?                @map("call_note")
   version         Int                    @default(1)
   createdAt       DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -402,6 +417,7 @@ model Incident {
   outboxMessages  OutboxMessage[]
   photos          IncidentPhoto[]
   comments        IncidentComment[]
+  feedback        IncidentFeedback[]
 
   @@index([buildingId, status, updatedAt(sort: Desc)])
   @@index([buildingId, category, locationZone, status])
@@ -422,6 +438,31 @@ model IncidentComment {
   @@index([incidentId, createdAt])
   @@index([apartmentId])
   @@map("incident_comments")
+}
+
+// A resident's answer after the company marked the incident resolved: the
+// problem is really gone (with an optional rating of the work) or it is not,
+// and then the incident went back to work. One answer per resident; when the
+// incident is resolved again the answer is asked and replaced again.
+model IncidentFeedback {
+  id          String     @id @default(uuid()) @db.Uuid
+  incidentId  String     @map("incident_id") @db.Uuid
+  userId      String     @map("user_id") @db.Uuid
+  apartmentId String?    @map("apartment_id") @db.Uuid
+  resolved    Boolean
+  // 1 to 5, only for a confirmed result.
+  rating      Int?
+  // What is still wrong, when the resident returned the incident.
+  comment     String?
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  incident    Incident   @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apartment   Apartment? @relation(fields: [apartmentId], references: [id], onDelete: SetNull)
+
+  @@unique([incidentId, userId])
+  @@index([updatedAt])
+  @@map("incident_feedback")
 }
 
 model Report {

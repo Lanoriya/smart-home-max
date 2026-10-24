@@ -5,6 +5,7 @@ import { AppointmentsManager, PollsManager } from './engagement';
 import { CompanyStats, HousesMap, PrivacyManager, QuickDialManager, TeamManager } from './desk-extra';
 import { loadOverview, PlatformConnect, PlatformOverview, TransferHouse, type PlatformCompany } from './platform';
 import { formatFullDate, formatShortDate, setDeskZone, toZoneInput, zoneInputToIso, zoneOffset } from './zones';
+import { HouseQrButton, PhoneIncidentDrawer } from './intake';
 
 type HealthState = 'checking' | 'online' | 'offline';
 type LoadState = 'loading' | 'ready' | 'error';
@@ -27,6 +28,8 @@ type Incident = {
   apartmentNumber: string | null;
   status: Status;
   priority: string;
+  // A resident in MAX or a phone call registered by the dispatcher.
+  source?: 'resident' | 'phone';
   address: string;
   reportsCount: number;
   subscribersCount: number;
@@ -48,6 +51,11 @@ type IncidentDetail = Incident & {
   events: Array<{ id: string; type: string; payload: unknown; createdAt: string }>;
   photos: Array<{ id: string; token: string; url: string | null; createdAt: string; author: { memberships: Array<{ apartment: { number: string } }> } }>;
   comments?: Array<{ id: string; text: string; createdAt: string; apartment: { number: string } | null; author: { displayName: string | null; maxUserId: string } }>;
+  building?: { address: string };
+  callerName?: string | null; callerPhone?: string | null; callNote?: string | null;
+  // Answers of residents after "resolved": confirmed (with a rating) or returned.
+  feedback?: Array<{ id: string; resolved: boolean; rating: number | null; comment: string | null; updatedAt: string; apartment: { number: string } | null }>;
+  feedbackSummary?: { confirmed: number; returned: number; ratingAverage: number | null };
 };
 
 const statusLabels: Record<Status, string> = {
@@ -100,6 +108,7 @@ export function App() {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [selected, setSelected] = useState<IncidentDetail | null>(null);
+  const [intakeOpen, setIntakeOpen] = useState(false);
   const [saved] = useState(readFilters);
   const [archiveView, setArchiveView] = useState(saved.archiveView ?? false);
   const [placeFilter, setPlaceFilter] = useState(saved.placeFilter ?? '');
@@ -231,7 +240,8 @@ export function App() {
   async function openIncident(id: string) {
     const { item } = await api<{ item: IncidentDetail }>(`/api/incidents/${id}`);
     const summary = incidents.find((incident) => incident.id === id);
-    setSelected({ ...summary, ...item } as IncidentDetail);
+    // A just created incident is not in the loaded queue yet.
+    setSelected({ ...summary, ...item, address: summary?.address ?? item.building?.address ?? '' } as IncidentDetail);
   }
 
   if (!authChecked) return <CenteredMessage text="Проверяем сессию…" />;
@@ -307,7 +317,7 @@ export function App() {
         <section className="panel">
           <div className="queue-head">
             <div className="queue-title"><div><h2>{archiveView ? 'Архив: устранённые и отклонённые' : 'Очередь заявок'}</h2><p className="refresh-info">{archiveView ? 'Заявку из архива можно открыть и вернуть в работу.' : 'Список обновляется сам каждые 10 секунд. Чем больше жителей поддержали заявку, тем она выше.'}</p></div>
-              <div className="segmented" role="group" aria-label="Что показать"><button type="button" aria-pressed={!archiveView} onClick={() => setArchiveView(false)}>Очередь</button><button type="button" aria-pressed={archiveView} onClick={() => setArchiveView(true)}>Архив</button></div></div>
+              <div className="queue-title-actions">{platformMode ? null : <button className="primary" type="button" onClick={() => setIntakeOpen(true)} title="Житель позвонил по телефону: заведите заявку за него">+ Заявка по звонку</button>}<div className="segmented" role="group" aria-label="Что показать"><button type="button" aria-pressed={!archiveView} onClick={() => setArchiveView(false)}>Очередь</button><button type="button" aria-pressed={archiveView} onClick={() => setArchiveView(true)}>Архив</button></div></div></div>
             <div className="queue-toolbar">
               <form className="toolbar-field number-search" onSubmit={(event) => { event.preventDefault(); setNumberFilter(numberInput.replace(/\D/g, '')); }}><label htmlFor="incident-number">Номер заявки</label><div className="input-group"><input id="incident-number" type="search" inputMode="numeric" value={numberInput} onChange={(event) => { setNumberInput(event.target.value); if (!event.target.value) setNumberFilter(''); }} placeholder="Например, 1024" /><button className="filter" type="submit">Найти</button></div></form>
               <Picker label="Улица или дом" options={buildingPickerOptions(allBuildings, { streets: true, prefix: 'building:' })} value={placeFilter} onChange={setPlaceFilter} placeholder="Все дома" emptyLabel="Все дома" disabled={Boolean(numberFilter)} searchPlaceholder="Улица или номер дома" />
@@ -333,13 +343,14 @@ export function App() {
                 <div className="incident-code"><span className="plate" title="Номер заявки. Его же видит житель в боте.">№ {incident.number}</span><time>{formatShortDate(incident.createdAt, incident.timeZone)}</time></div>
                 <div className="incident-main"><h3>{incident.title}</h3><p>{incident.address}, {formatPlace(incident).toLowerCase()}</p>{incident.legalTerm && !['resolved', 'rejected'].includes(incident.status) ? <small className={`legal-term ${new Date(incident.legalTerm.dueAt).getTime() < Date.now() ? 'late' : ''}`} title={`${incident.legalTerm.title}. ${incident.legalTerm.source}`}>По закону: {termLeft(incident.legalTerm.dueAt)}</small> : null}</div>
                 <div className="reports" title="Жителей, обратившихся по заявке, и комментариев в обсуждении"><strong>{incident.reportsCount} {plural(incident.reportsCount, 'житель', 'жителя', 'жителей')}</strong><small>{incident.commentsCount ?? 0} {plural(incident.commentsCount ?? 0, 'комментарий', 'комментария', 'комментариев')}</small></div>
-                <span className="badges">{incident.priority === 'emergency' ? <span className="badge urgency-emergency">Авария</span> : incident.priority === 'high' ? <span className="badge urgency-high">Срочная</span> : null}<span className={`badge ${statusTone(incident.status)}`}>{statusLabels[incident.status]}</span></span>
+                <span className="badges">{incident.source === 'phone' ? <span className="badge phone" title="Заявку завёл диспетчер по телефонному звонку">По звонку</span> : null}{incident.priority === 'emergency' ? <span className="badge urgency-emergency">Авария</span> : incident.priority === 'high' ? <span className="badge urgency-high">Срочная</span> : null}<span className={`badge ${statusTone(incident.status)}`}>{statusLabels[incident.status]}</span></span>
                 <span className="open" aria-hidden="true">Открыть</span>
               </article>
             ))}
           </div>
         </section></>}
       </main>
+      {intakeOpen && <PhoneIncidentDrawer buildings={allBuildings} onClose={() => setIntakeOpen(false)} onCreated={async (id) => { setIntakeOpen(false); setArchiveView(false); await reloadIncidents(true); await openIncident(id); }} onNotice={notify} />}
       {selected && <IncidentDrawer incident={selected} onClose={() => setSelected(null)} onSaved={async () => { setSelected(null); await reloadIncidents(); }} onCommentDeleted={async () => { await openIncident(selected.id); await reloadIncidents(true); }} onNotice={notify} />}
       {notice && <div className={`toast ${notice.tone}`} role="status"><span>{notice.tone === 'success' ? '✓' : '!'}</span><p>{notice.text}</p><button type="button" onClick={() => setNotice(null)} aria-label="Закрыть уведомление">×</button></div>}
     </div>
@@ -452,7 +463,7 @@ function BuildingsManager({ onNotice, canDelete, transferFrom }: { onNotice: (te
       {items.length > 0 && groups.length === 0 && <p className="state-message">По запросу «{filter}» домов нет. Проверьте написание или очистите поиск.</p>}
       {groups.map(([streetName, houses]) => <div className="street-group" key={streetName}>
         <h3 className="street-title">{streetName}<span>{houses.length} {plural(houses.length, 'дом', 'дома', 'домов')}</span></h3>
-        {houses.map((item) => <article className={`building-row ${editing?.id === item.id ? 'selected' : ''}`} key={item.id}><div><h3>{item.house ? `Дом ${item.house}` : item.address}</h3><p>{item.apartmentsCount} {plural(item.apartmentsCount, 'квартира', 'квартиры', 'квартир')}, {item.entrancesCount} {plural(item.entrancesCount, 'подъезд', 'подъезда', 'подъездов')}, {item._count?.incidents ?? 0} {plural(item._count?.incidents ?? 0, 'заявка', 'заявки', 'заявок')} за всё время</p><p className="form-hint">Чат дома: {item.chatLink ? item.chatLink : 'не указан'}</p>{canDelete ? <BuildingCode buildingId={item.id} onNotice={onNotice} /> : <p className="form-hint">Код дома для жителей показывает и меняет руководитель.</p>}</div><div className="building-actions"><button className="filter" onClick={() => startEdit(item)}>Редактировать</button>{transferFrom ? <TransferHouse buildingId={item.id} address={item.address} currentCompanyId={transferFrom} onDone={() => void reload()} onNotice={onNotice} /> : null}{canDelete && <button className="filter danger" onClick={() => void remove(item)}>Удалить</button>}</div></article>)}
+        {houses.map((item) => <article className={`building-row ${editing?.id === item.id ? 'selected' : ''}`} key={item.id}><div><h3>{item.house ? `Дом ${item.house}` : item.address}</h3><p>{item.apartmentsCount} {plural(item.apartmentsCount, 'квартира', 'квартиры', 'квартир')}, {item.entrancesCount} {plural(item.entrancesCount, 'подъезд', 'подъезда', 'подъездов')}, {item._count?.incidents ?? 0} {plural(item._count?.incidents ?? 0, 'заявка', 'заявки', 'заявок')} за всё время</p><p className="form-hint">Чат дома: {item.chatLink ? item.chatLink : 'не указан'}</p>{canDelete ? <BuildingCode buildingId={item.id} onNotice={onNotice} /> : <p className="form-hint">Код дома для жителей показывает и меняет руководитель.</p>}</div><div className="building-actions"><button className="filter" onClick={() => startEdit(item)}>Редактировать</button><HouseQrButton buildingId={item.id} onNotice={onNotice} />{transferFrom ? <TransferHouse buildingId={item.id} address={item.address} currentCompanyId={transferFrom} onDone={() => void reload()} onNotice={onNotice} /> : null}{canDelete && <button className="filter danger" onClick={() => void remove(item)}>Удалить</button>}</div></article>)}
       </div>)}
     </div>
   </section>
@@ -713,6 +724,8 @@ function IncidentDrawer({ incident, onClose, onSaved, onCommentDeleted, onNotice
     {viewer !== null && viewablePhotos[viewer] && <PhotoViewer photos={viewablePhotos} index={viewer} onChange={setViewer} onClose={() => setViewer(null)} />}
     <aside className="drawer"><button className="drawer-close" onClick={onClose}>×</button>
       <span className="plate">№ {incident.number}</span><h2>{incident.title}</h2><p className="drawer-meta">{incident.address}, {formatPlace(incident).toLowerCase()}</p>{incident.legalTerm && !['resolved', 'rejected'].includes(incident.status) ? <div className={`legal-box ${new Date(incident.legalTerm.dueAt).getTime() < Date.now() ? 'late' : ''}`}><strong>Срок по закону: {termLeft(incident.legalTerm.dueAt)}</strong><span>{incident.legalTerm.title}{incident.legalTerm.firstStep ? `; ${incident.legalTerm.firstStep}` : ''}. Крайний срок — {formatFullDate(incident.legalTerm.dueAt, incident.timeZone)} ({zoneOffset(incident.timeZone)}).</span><small>{incident.legalTerm.source}. Договор управления может устанавливать более короткий срок.</small></div> : null}
+      {incident.source === 'phone' ? <div className="reports-block"><h3>Принята по телефону</h3><div className="report-card"><strong>{[incident.callerName, incident.callerPhone].filter(Boolean).join(', ') || 'Звонивший не представился'}</strong><p>{incident.callNote ?? incident.title}</p><time>{formatFullDate(incident.createdAt, incident.timeZone)}</time></div>{incident.reports.length === 0 ? <p className="form-hint">Жителей этой квартиры пока нет в MAX: о ходе работ сообщите звонившему сами.</p> : null}</div> : null}
+      {incident.feedback?.length ? <div className="reports-block"><h3>Ответ жителей после «Устранена»</h3><p className="form-hint">Подтвердили: {incident.feedbackSummary?.confirmed ?? 0}, вернули в работу: {incident.feedbackSummary?.returned ?? 0}{incident.feedbackSummary?.ratingAverage ? `, средняя оценка ${incident.feedbackSummary.ratingAverage} из 5` : ''}.</p>{incident.feedback.map((item) => <div className={`report-card feedback-card ${item.resolved ? 'ok' : 'back'}`} key={item.id}><strong>Квартира {item.apartment?.number ?? 'не указана'}: {item.resolved ? `решено${item.rating ? ` · ${'★'.repeat(item.rating)}${'☆'.repeat(5 - item.rating)}` : ''}` : 'не решено, вернул в работу'}</strong>{item.comment ? <p>{item.comment}</p> : null}<time>{formatFullDate(item.updatedAt, incident.timeZone)}</time></div>)}</div> : null}
       <div className="reports-block"><h3>Обращения жителей ({incident.reports.length})</h3>{incident.reports.map((report, index) => <div className="report-card" key={report.id}><strong>{index === 0 ? 'Заявитель' : 'Присоединился'}, квартира {report.apartment?.number ?? 'не указана'}</strong><p>{report.description || 'Присоединился: у него та же проблема'}</p><time>{formatFullDate(report.createdAt)}</time></div>)}</div>
       <div className="reports-block"><h3>Комментарии жителей ({incident.comments?.length ?? 0})</h3>{incident.comments?.length ? incident.comments.map((comment) => <div className="report-card" key={comment.id}><strong>Квартира {comment.apartment?.number ?? 'не указана'}</strong><p>{comment.text}</p><time>{formatFullDate(comment.createdAt, incident.timeZone)}</time><button className="filter danger comment-delete" type="button" onClick={async () => { if (!window.confirm('Удалить этот комментарий?')) return; try { await api(`/api/incidents/${incident.id}/comments/${comment.id}`, { method: 'DELETE' }); await onCommentDeleted(); onNotice('Комментарий удалён.'); } catch { const message = 'Не удалось удалить комментарий.'; setError(message); onNotice(message, 'error'); } }}>Удалить комментарий</button></div>) : <p className="form-hint">Комментариев пока нет.</p>}</div>
       <div className="reports-block"><h3>Фотографии ({incident.photos.length})</h3>{incident.photos.length === 0 ? <p className="form-hint">Фотографий пока нет.</p> : <div className="photo-grid">{incident.photos.map((photo) => photo.url ? <button type="button" className="photo-open" key={photo.id} onClick={() => setViewer(viewablePhotos.findIndex((item) => item.id === photo.id))} aria-label={`Открыть фото от квартиры ${photo.author.memberships[0]?.apartment.number ?? ''}`}><img src={photo.url} alt={`Фото от квартиры ${photo.author.memberships[0]?.apartment.number ?? ''}`} /></button> : <div className="photo-token" key={photo.id}>Фото от квартиры {photo.author.memberships[0]?.apartment.number ?? 'не указана'}<small>MAX: {photo.token.slice(0, 14)}…</small></div>)}</div>}</div>
@@ -798,7 +811,7 @@ function formatPlace(incident: Pick<Incident, 'locationZone' | 'entranceNumber' 
   return incident.locationZone === 'entrance' ? `Подъезд ${incident.entranceNumber}` : `${zone}, подъезд ${incident.entranceNumber}`;
 }
 function statusTone(status: Status) { return ({ new: 'new', acknowledged: 'acknowledged', in_progress: 'progress', resolved: 'resolved', rejected: 'rejected' } as Record<Status, string>)[status]; }
-function eventLabel(type: string) { return ({ incident_created: 'Обращение создано', resident_joined: 'Присоединился ещё один житель', incident_updated: 'УК обновила заявку', resident_report_cancelled: 'Житель отменил своё обращение' } as Record<string, string>)[type] ?? type; }
+function eventLabel(type: string) { return ({ incident_created: 'Обращение создано', incident_registered_by_phone: 'Диспетчер завёл заявку по звонку', resident_joined: 'Присоединился ещё один житель', incident_updated: 'УК обновила заявку', incident_escalated: 'Приоритет поднят: жители подтверждают проблему', resident_report_cancelled: 'Житель отменил своё обращение', resident_confirmed: 'Житель подтвердил: проблема решена', resident_reopened: 'Житель вернул в работу: проблема не решена' } as Record<string, string>)[type] ?? type; }
 function CenteredMessage({ text }: { text: string }) { return <div className="centered-message">{text}</div>; }
 
 const helpSections: Array<{ id: string; title: string }> = [
@@ -855,12 +868,16 @@ function HelpPage({ onOpen }: { onOpen: (page: Page) => void }) {
         <h3>Очередь и архив</h3>
         <p>Очередь можно сузить до улицы или дома, типа проблемы (вода, лифт, уборка…), места (подъезд, лифт, двор, квартира) и статуса — фильтры складываются, «Сбросить фильтры» возвращает всё. Порядок можно выбрать: по поддержке жителей, по дате, по ближайшему сроку, по последнему обновлению, по типу проблемы, по месту или по адресу. В очереди — заявки, которые ещё не устранены и не отклонены. По умолчанию сверху массовые: те, к которым присоединилось больше всего жителей. Порядок можно сменить на «Сначала новые».</p>
         <p>Устранённые и отклонённые заявки уходят в архив. Из архива заявку можно открыть и вернуть в работу кнопкой «Восстановить из архива».</p>
+        <h3>Заявка по звонку</h3>
+        <p>Если житель позвонил по телефону, нажмите «+ Заявка по звонку» над очередью: дом, квартира звонившего, что и где случилось, срочность, имя и телефон. Заявка сразу встаёт в очередь со статусом «Принята» и отметкой «По звонку». Если жители этой квартиры подключены к боту, они получат заявку в MAX и дальше будут видеть её статус, как если бы написали сами. Имя и телефон звонившего видят только сотрудники УК.</p>
+        <h3>Проверка жителем</h3>
+        <p>Когда вы ставите статус «Устранена», бот спрашивает каждого обратившегося жителя: «Проблема действительно решена?». «Да, решено» — житель может оценить работу от 1 до 5. «Не решено» — заявка сразу возвращается в работу и выходит из архива, а сотрудники получают сообщение в MAX с тем, что осталось не так. Ответить можно в течение 14 дней. Ответы видны в карточке заявки, а в «Показателях» — доля устранённых заявок, которые подтвердили жители, и средняя оценка.</p>
         <h3>Карточка заявки</h3>
         <ul>
           <li><strong>Обращения жителей</strong> — что написал каждый и из какой квартиры. Первым идёт заявитель.</li>
           <li><strong>Комментарии жителей</strong> — обсуждение общей заявки соседями. Неуместный комментарий можно удалить.</li>
           <li><strong>Фотографии</strong> — до 3 от каждого жителя и до 9 на заявку.</li>
-          <li><strong>История</strong> — кто и когда создал заявку, присоединился, отменил обращение или изменил статус.</li>
+          <li><strong>История</strong> — кто и когда создал заявку, присоединился, отменил обращение, изменил статус, подтвердил результат или вернул заявку в работу.</li>
         </ul>
         <p>Когда вы сохраняете изменения, бот присылает всем обратившимся жителям новый статус, плановый срок, причину переноса и ваш комментарий.</p>
         <p className="help-note">Заявки «по квартире» (протечка, нет воды в квартире) видят только сам житель и диспетчер. Соседи их не видят и присоединиться не могут.</p>
@@ -888,6 +905,7 @@ function HelpPage({ onOpen }: { onOpen: (page: Page) => void }) {
           <li><strong>Новый случайный</strong> — заменить код, например если он попал к посторонним. Уже подключённые жители останутся подключены, новый код нужен только для новых подключений.</li>
           <li><strong>Задать свой</strong> — ввести код вручную, например чтобы он совпадал с напечатанным в квитанциях.</li>
         </ul>
+        <p><strong>QR-код для подъезда</strong> — у каждого дома в списке. Распечатайте листовку и повесьте у входа или у лифта: житель наводит камеру, и бот в MAX открывается сразу с этим домом. Остаётся указать квартиру и подтвердить её кодом дома или номером договора. Сам QR-код доступа к квартире не даёт.</p>
         <p>Удаление дома удаляет все его заявки, квартиры и данные жителей. Жители дома отключаются и при следующем обращении к боту выбирают квартиру заново. Действие нельзя отменить.</p>
       </section>
 

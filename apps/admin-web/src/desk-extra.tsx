@@ -15,6 +15,7 @@ type Stats = {
   open: number; newOnes: number; overdue: number; reactionMinutesMedian: number | null; resolveHoursMedian: number | null;
   onTimeShare: number | null; residents: number; buildings: number; buildingsOnMap: number;
   topCategories: Array<{ category: string; count: number }>;
+  resolvedCount: number; confirmedShare: number | null; confirmedCount: number; reopenedCount: number; ratingAverage: number | null; ratingsCount: number; phoneIncidents: number;
 };
 const categoryLabels: Record<string, string> = { water: 'Водоснабжение', electricity: 'Электричество', heating: 'Отопление', elevator: 'Лифт', leak: 'Протечка', cleaning: 'Уборка', other: 'Другое' };
 
@@ -40,6 +41,10 @@ export function CompanyStats({ onNotice }: { onNotice: Notify }) {
     [stats.resolveHoursMedian === null ? '—' : `${Math.round(stats.resolveHoursMedian)} ч`, 'медиана решения'],
     [percent(stats.onTimeShare), 'решено в срок'],
     [String(stats.duplicatesAvoided), 'дублей не создано', 'Жители присоединились к уже открытой заявке вместо новой'],
+    [percent(stats.confirmedShare), 'устранённых подтвердили жители', `Житель нажал «Да, решено»: ${stats.confirmedCount} из ${stats.resolvedCount} устранённых за период`],
+    [stats.ratingAverage === null ? '—' : `${stats.ratingAverage} из 5`, 'средняя оценка жителей', `Оценок за период: ${stats.ratingsCount}`],
+    [String(stats.reopenedCount), 'возвращено жителями в работу', 'Житель нажал «Не решено» после отметки «Устранена»'],
+    [String(stats.phoneIncidents), 'заявок принято по звонку', 'Заведены диспетчером в пульте; остальные пришли через MAX'],
     [String(stats.residents), plural(stats.residents, 'житель в сервисе', 'жителя в сервисе', 'жителей в сервисе')],
     [`${stats.buildingsOnMap} из ${stats.buildings}`, 'домов на карте'],
   ];

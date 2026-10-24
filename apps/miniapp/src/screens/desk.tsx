@@ -21,6 +21,8 @@ export function MetricsGrid({ stats }: { stats: Stats }) {
       <StatTile value={stats.duplicatesAvoided} label="дублей не создано" hint="Жители присоединились к уже открытой заявке вместо новой" />
       <StatTile value={duration(stats.reactionMinutesMedian)} label="медиана реакции" />
       <StatTile value={percent(stats.onTimeShare)} label="решено в срок" />
+      <StatTile value={percent(stats.confirmedShare)} label="подтвердили жители" hint="Доля устранённых заявок, где житель нажал «Да, решено»" />
+      <StatTile value={stats.ratingAverage ?? '—'} label="средняя оценка" hint="Оценка работы от 1 до 5 после подтверждения" />
     </div>
   );
 }

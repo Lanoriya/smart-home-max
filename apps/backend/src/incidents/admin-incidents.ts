@@ -7,6 +7,7 @@ import { viaBuilding, type AdminActor } from '../auth/scope.js';
 import { type Html, blocks, bold, html } from '../shared/html.js';
 import type { CallbackButton } from '../bot/messenger.js';
 import { buildingZone, formatInZone } from '../shared/time-zone.js';
+import { feedbackSummary } from './resident-feedback.js';
 
 // Incident work of a company administrator. Shared by the web dispatcher desk
 // and the mini-app so both follow the same rules and notify residents alike.
@@ -96,6 +97,7 @@ export async function listIncidents(companyId: string | null, filters: z.infer<t
     apartmentNumber: incident.apartmentNumber,
     status: incident.status,
     priority: incident.priority,
+    source: incident.source,
     buildingId: incident.buildingId,
     companyId: incident.building.companyId,
     address: incident.building.address,
@@ -121,7 +123,8 @@ export async function getIncident(companyId: string | null, id: string) {
   const incident = await findIncident(companyId, id);
   if (!incident) return null;
   const timeZone = buildingZone(incident.building);
-  return { ...incident, timeZone, legalTerm: legalTermOf({ ...incident, timeZone }) };
+  // The latest answer of each resident who reported the incident.
+  return { ...incident, timeZone, legalTerm: legalTermOf({ ...incident, timeZone }), feedbackSummary: feedbackSummary(incident.feedback) };
 }
 
 function findIncident(companyId: string | null, id: string) {
@@ -144,6 +147,7 @@ function findIncident(companyId: string | null, id: string) {
         select: { id: true, type: true, payload: true, createdAt: true },
       },
       _count: { select: { subscriptions: true, comments: true } },
+      feedback: { orderBy: { updatedAt: 'desc' }, select: { id: true, resolved: true, rating: true, comment: true, updatedAt: true, apartment: { select: { number: true } } } },
       comments: { orderBy: { createdAt: 'asc' }, select: { id: true, text: true, createdAt: true, apartment: { select: { number: true } }, author: { select: { displayName: true, maxUserId: true } } } },
       photos: {
         orderBy: { createdAt: 'asc' },
@@ -231,6 +235,7 @@ export async function updateIncident(admin: AdminActor, companyId: string | null
       include: { user: { select: { maxUserId: true } } },
     });
     if (subscriptions.length > 0 && patch.archived !== false) {
+      const askFeedback = updated.status === 'resolved' && current.status !== 'resolved';
       const text = notificationText({
         number: updated.number,
         title: updated.title,
@@ -241,12 +246,14 @@ export async function updateIncident(admin: AdminActor, companyId: string | null
         comment: isResolved ? undefined : patch.publicComment,
         rejectionReason: updated.rejectionReason,
         timeZone: buildingZone(current.building),
+        askFeedback,
       }).value;
+      const buttons = askFeedback ? [...feedbackButtons(updated.id), ...incidentButtons(updated.id, updated.number)] : incidentButtons(updated.id, updated.number);
       await tx.outboxMessage.createMany({
         data: subscriptions.map(({ user }) => ({
           incidentId: current.id,
           type: 'incident_updated',
-          payload: { userId: user.maxUserId, text, format: 'html', buttons: incidentButtons(updated.id, updated.number) },
+          payload: { userId: user.maxUserId, text, format: 'html', buttons },
         })),
       });
     }
@@ -265,6 +272,14 @@ export function incidentButtons(incidentId: string, number: number): CallbackBut
     [{ text: 'Открыть в приложении', payload: `incident_${number}`, openApp: true }],
     [{ text: 'В главное меню', payload: 'menu:main' }],
   ];
+}
+
+// "Is the problem gone?" — asked once the company marked the incident resolved.
+export function feedbackButtons(incidentId: string): CallbackButton[][] {
+  return [[
+    { text: 'Да, решено', payload: `incident:accept:${incidentId}`, intent: 'positive' },
+    { text: 'Не решено', payload: `incident:reopen:${incidentId}`, intent: 'negative' },
+  ]];
 }
 
 const transitions: Record<IncidentStatus, IncidentStatus[]> = {
@@ -293,6 +308,8 @@ export function notificationText(incident: {
   rejectionReason?: string | null | undefined;
   // The zone of the house: the deadline is written on its clock.
   timeZone?: string | undefined;
+  // "Resolved" for the first time: the resident is asked to confirm it.
+  askFeedback?: boolean | undefined;
 }): Html {
   const labels: Record<IncidentStatus, string> = {
     new: 'Новая',
@@ -313,5 +330,6 @@ export function notificationText(incident: {
       incident.rejectionReason ? `Причина отклонения: ${incident.rejectionReason}` : null,
     ],
     incident.comment ? [bold('Сообщение УК'), incident.comment] : [],
+    incident.askFeedback ? [bold('Проблема действительно решена?'), 'Если нет — нажмите «Не решено»: заявка сразу вернётся в работу, а УК получит уведомление.'] : [],
   );
 }

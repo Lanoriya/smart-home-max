@@ -689,3 +689,14 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: .8; }
 .announcement-history-head h3 { margin: 0; }
 .report-card .building-actions { margin-top: 8px; }
 .report-card .building-actions .filter { padding: 4px 8px; font-size: 13px; }
+
+/* Phone intake, resident answers and the QR code of a house */
+.queue-title-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
+.badge.phone { background: var(--plate-tint); color: var(--accent-text); }
+.intake-form { margin-top: 16px; }
+.intake-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.feedback-card.ok { border-left: 3px solid var(--green); }
+.feedback-card.back { border-left: 3px solid var(--red); }
+.qr-preview { width: min(280px, 100%); margin: 18px auto 12px; padding: 12px; border-radius: var(--radius); background: #fff; }
+.qr-preview svg { display: block; width: 100%; height: auto; }
+.qr-link { display: block; margin: 0 0 14px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-small); background: var(--surface); font-size: 12px; overflow-wrap: anywhere; }

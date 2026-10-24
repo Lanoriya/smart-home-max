@@ -35,6 +35,8 @@ import { buildingZone, formatInZone, localTime } from '../shared/time-zone.js';
 import { lookupPhones, lookupVehicleInclude } from '../residents/vehicle-phones.js';
 import { codeAttemptsLeft, registerCodeFailure } from '../residents/code-attempts.js';
 import { canClearApartmentData, clearApartmentData } from '../residents/apartment-data.js';
+import { feedbackOpen, feedbackState, giveFeedback, type FeedbackResult } from '../incidents/resident-feedback.js';
+import { feedbackButtons } from '../incidents/admin-incidents.js';
 
 const sessionDataSchema = z.object({
   apartmentId: z.string().uuid().optional(),
@@ -103,6 +105,36 @@ export class IncidentFlow {
     await this.showMainMenu(maxUserId);
   }
 
+  // A QR code at the entrance: the bot opens with this house chosen, the
+  // resident types only the apartment and proves it as usual.
+  async startAtHouse(maxUserId: string, buildingId: string): Promise<void> {
+    const user = await this.ensureUser(maxUserId);
+    const building = await prisma.building.findUnique({ where: { id: buildingId }, select: { id: true, address: true } });
+    if (!building) { await this.start(maxUserId); return; }
+    const membership = await this.getMembership(user.id);
+    if (membership) {
+      if (membership.apartment.buildingId === building.id) { await this.start(maxUserId); return; }
+      await this.messenger.sendMessageToUser(maxUserId, blocks(
+        [bold(building.address)],
+        [`Вы уже подключены к адресу ${membership.apartment.building.address}, кв. ${membership.apartment.number}.`],
+        ['Если вы переехали, смените квартиру — заявки и объявления придут по новому адресу.'],
+      ), [[{ text: 'Сменить квартиру', payload: 'apartment:change' }], ...mainMenuLinkButtons()]);
+      return;
+    }
+    if (await pendingJoinRequest(user.id)) { await this.showJoinWaiting(maxUserId, user.id); return; }
+    await prisma.botSession.deleteMany({ where: { userId: user.id } });
+    if (!(await prisma.user.findUnique({ where: { id: user.id }, select: { consentAt: true } }))?.consentAt) {
+      await this.askConsent(maxUserId, building.id);
+      return;
+    }
+    await this.saveSession(user.id, 'apartment_number', { buildingId: building.id });
+    await this.messenger.sendMessageToUser(maxUserId, blocks(
+      [bold('Добро пожаловать в «Домовед»')],
+      ['Здесь можно сообщить о проблеме в управляющую компанию и следить за заявкой, читать объявления УК и голосовать в опросах дома.'],
+      [html`Дом: ${bold(building.address)}`, 'Введите номер своей квартиры цифрами.'],
+    ), await this.addressButtons(user.id, 'inside'));
+  }
+
   async begin(maxUserId: string): Promise<void> {
     const user = await this.ensureUser(maxUserId);
     const membership = await this.getMembership(user.id);
@@ -162,6 +194,20 @@ export class IncidentFlow {
       } catch {
         await this.messenger.sendMessageToUser(maxUserId, 'Не удалось добавить фото: максимум 3 от одного жителя и 9 на заявку.');
       }
+      return true;
+    }
+    if (session.step === 'reopen_reason') {
+      if (!data.incidentId) return false;
+      const reason = text.trim();
+      if (reason.length < 2 || reason.length > 500) {
+        await this.messenger.sendMessageToUser(maxUserId, reason.length > 500 ? `Слишком длинно: ${reason.length} символов, можно до 500.` : 'Напишите текстом, что осталось не так, или нажмите «Вернуть без описания».', [
+          [{ text: 'Вернуть без описания', payload: `incident:reopen-now:${data.incidentId}`, intent: 'negative' }],
+          [{ text: 'Отмена', payload: `incident:view:${data.incidentId}` }],
+        ]);
+        return true;
+      }
+      await prisma.botSession.deleteMany({ where: { userId: user.id } });
+      await this.answerFeedback(maxUserId, data.incidentId, await giveFeedback(user.id, data.incidentId, { resolved: false, comment: reason }));
       return true;
     }
     if (session.step === 'incident_comment') {
@@ -742,6 +788,9 @@ export class IncidentFlow {
       await this.messenger.sendMessageToUser(maxUserId, `${building.address}\nВведите номер своей квартиры цифрами.`, await this.addressButtons(user.id, 'inside'));
       return true;
     }
+    // The answer of a resident after "resolved": confirm and rate, or return.
+    const feedbackMatch = /^incident:(accept|rate|reopen|reopen-now):([0-9a-f-]{36})(?::([1-5]))?$/.exec(payload);
+    if (feedbackMatch) return this.handleFeedback(maxUserId, user.id, feedbackMatch[1]!, feedbackMatch[2]!, feedbackMatch[3] ? Number(feedbackMatch[3]) : undefined);
     if (payload.startsWith('incident:view:')) {
       const incidentId = payload.slice('incident:view:'.length);
       if (!z.string().uuid().safeParse(incidentId).success) return false;
@@ -981,6 +1030,59 @@ export class IncidentFlow {
       : `Вы присоединились к заявке № ${result.incident.number} и будете получать обновления.`;
     await this.messenger.sendMessageToUser(maxUserId, text, mainMenuLinkButtons());
     return true;
+  }
+
+  private async handleFeedback(maxUserId: string, userId: string, action: string, incidentId: string, rating?: number): Promise<boolean> {
+    if (!z.string().uuid().safeParse(incidentId).success) return false;
+    if (action === 'reopen') {
+      const incident = await prisma.incident.findFirst({ where: { id: incidentId, reports: { some: { authorUserId: userId } } }, select: { id: true, number: true, status: true, resolvedAt: true } });
+      if (!incident || !feedbackOpen(incident)) { await this.answerFeedback(maxUserId, incidentId, { ok: false, code: incident ? 'feedback_closed' : 'incident_not_found' }); return true; }
+      await this.saveSession(userId, 'reopen_reason', { incidentId });
+      await this.messenger.sendMessageToUser(maxUserId, blocks(
+        [bold(`Заявка № ${incident.number}: проблема не решена`)],
+        ['Напишите одним сообщением, что осталось не так, — диспетчер увидит это вместе с заявкой.'],
+        ['Или верните заявку в работу без описания.'],
+      ), [
+        [{ text: 'Вернуть без описания', payload: `incident:reopen-now:${incident.id}`, intent: 'negative' }],
+        [{ text: 'Отмена', payload: `incident:view:${incident.id}` }],
+      ]);
+      return true;
+    }
+    await prisma.botSession.deleteMany({ where: { userId } });
+    const result = await giveFeedback(userId, incidentId, action === 'reopen-now' ? { resolved: false } : { resolved: true, ...(rating ? { rating } : {}) });
+    await this.answerFeedback(maxUserId, incidentId, result, action === 'accept' ? 'ask_rating' : rating);
+    return true;
+  }
+
+  private async answerFeedback(maxUserId: string, incidentId: string, result: FeedbackResult, next?: 'ask_rating' | number) {
+    const back: CallbackButton[][] = [[{ text: 'Открыть заявку', payload: `incident:view:${incidentId}` }], ...mainMenuLinkButtons()];
+    if (!result.ok) {
+      await this.messenger.sendMessageToUser(maxUserId, result.code === 'incident_not_found'
+        ? 'Заявка не найдена или больше вам недоступна.'
+        : 'Ответ по этой заявке уже не принимается: она снова в работе или закрыта больше 14 дней назад. Если проблема вернулась, сообщите о ней заново.', back);
+      return;
+    }
+    if (result.reopened) {
+      await this.messenger.sendMessageToUser(maxUserId, blocks(
+        [bold(`Заявка № ${result.number} снова в работе`)],
+        ['Управляющая компания получила уведомление. Новый статус и ответ придут сюда.'],
+      ), back);
+      return;
+    }
+    if (next === 'ask_rating') {
+      await this.messenger.sendMessageToUser(maxUserId, blocks(
+        [bold('Спасибо, что подтвердили!')],
+        ['Оцените, пожалуйста, работу УК по этой заявке: 5 — отлично, 1 — плохо.'],
+      ), [
+        [1, 2, 3, 4, 5].map((value) => ({ text: String(value), payload: `incident:rate:${incidentId}:${value}` })),
+        [{ text: 'Без оценки', payload: 'menu:main' }],
+      ]);
+      return;
+    }
+    await this.messenger.sendMessageToUser(maxUserId, blocks(
+      [bold('Спасибо за оценку!')],
+      [typeof next === 'number' ? `${'★'.repeat(next)}${'☆'.repeat(5 - next)} — оценка сохранена. Она помогает УК работать лучше.` : 'Ответ сохранён.'],
+    ), back);
   }
 
   async sendStaleDialog(maxUserId: string) {
@@ -1631,6 +1733,14 @@ export class IncidentFlow {
       .map((event) => ({ text: (event.payload as { publicComment?: unknown }).publicComment, at: event.createdAt }))
       .find((event): event is { text: string; at: Date } => typeof event.text === 'string' && event.text.length > 0);
     const comments = [...incident.comments].reverse();
+    const feedback = hasAnyOwnReport ? await feedbackState(userId, incident, true) : null;
+    const feedbackLines = feedback?.answer
+      ? [bold('Ваш ответ'), feedback.answer.resolved
+        ? `Проблема решена${feedback.answer.rating ? `, оценка ${feedback.answer.rating} из 5` : ''}`
+        : 'Не решено — заявка возвращена в работу']
+      : feedback?.canAnswer && feedback.until
+        ? [bold('Проблема действительно решена?'), `Ответьте до ${formatInZone(feedback.until, buildingZone(incident.building))}. Если нет — заявка вернётся в работу.`]
+        : [];
     const residents = `${incident._count.reports} ${plural(incident._count.reports, 'житель', 'жителя', 'жителей')}`;
     const zone = buildingZone(incident.building);
 
@@ -1658,9 +1768,15 @@ export class IncidentFlow {
       isCurrentPublicIncident && isActive && !hasAnyOwnReport
         ? ['Если проблема касается и вас, присоединитесь: заявка поднимется выше, а вы будете получать уведомления.']
         : [],
+      feedbackLines,
     );
     const ownComments = await prisma.incidentComment.count({ where: { incidentId: incident.id, authorUserId: userId } });
+    const feedbackRows: CallbackButton[][] = !feedback?.canAnswer ? []
+      : !feedback.answer ? feedbackButtons(incident.id)
+        : feedback.answer.resolved ? [[{ text: 'Изменить оценку', payload: `incident:accept:${incident.id}` }, { text: 'Всё-таки не решено', payload: `incident:reopen:${incident.id}`, intent: 'negative' }]]
+          : [];
     const buttons: CallbackButton[][] = [
+      ...feedbackRows,
       ...(isCurrentPublicIncident && isActive && !hasAnyOwnReport ? [[{ text: 'Присоединиться к заявке', payload: `incident:join-public:${incident.id}`, intent: 'positive' as const }]] : []),
       ...(isActive && (isCurrentPublicIncident || hasOwnReport) ? [[
         ...(isCurrentPublicIncident ? [{ text: 'Комментировать', payload: `incident:comment:${incident.id}` }] : []),
@@ -2255,7 +2371,7 @@ function pageLine(page: number, pages: number, total: number) {
 const menuLater = 'Главное меню откроется, когда вы выберете дом и квартиру — здесь или в приложении.';
 
 const openPayloads = new Set(['menu:main', 'flow:cancel', 'uk:contacts', 'uk:duties', 'emergency:services', 'bot:info', 'address:search', 'address:browse', 'city:change', 'desk:web', 'staff:reminders', 'staff:reminders:on', 'staff:reminders:off', 'apartment:change', 'apartment:change:confirm', 'join:cancel', 'join:status']);
-const openPrefixes = ['consent:accept:', 'building:choose:', 'city:choose:', 'street:choose:', 'join:approve:', 'join:reject:'];
+const openPrefixes = ['consent:accept:', 'building:choose:', 'city:choose:', 'street:choose:', 'join:approve:', 'join:reject:', 'incident:accept:', 'incident:rate:', 'incident:reopen:', 'incident:reopen-now:'];
 function opensWithoutAddress(payload: string) {
   return openPayloads.has(payload) || openPrefixes.some((prefix) => payload.startsWith(prefix));
 }

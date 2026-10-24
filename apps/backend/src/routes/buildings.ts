@@ -10,6 +10,7 @@ import { buildingWhere, requireCompanyId, type AdminActor } from '../auth/scope.
 import { deleteBuildingData } from '../buildings/delete-building.js';
 import { deletePhotoFiles } from '../photos/storage.js';
 import { requireUuidParams } from '../shared/params.js';
+import { houseLink } from '../buildings/house-link.js';
 
 export const buildingsRouter = Router();
 buildingsRouter.use(requireAdmin);
@@ -29,6 +30,17 @@ buildingsRouter.get('/', async (_request, response, next) => {
       include: { _count: { select: { apartments: true, incidents: true } } },
     });
     response.json({ items: items.sort(compareBuildings).map(publicBuilding) });
+  } catch (error) { next(error); }
+});
+
+// The link for the QR code at the entrance: the bot opens with this house chosen.
+buildingsRouter.get('/:id/resident-link', async (request, response, next) => {
+  try {
+    const building = await prisma.building.findFirst({ where: { id: String(request.params.id), ...buildingWhere(response.locals.companyId) }, select: { id: true, address: true, company: { select: { name: true, phone: true } } } });
+    if (!building) { response.status(404).json({ code: 'building_not_found' }); return; }
+    const link = houseLink(building.id);
+    if (!link) { response.status(409).json({ code: 'bot_username_missing' }); return; }
+    response.json({ link, address: building.address, companyName: building.company.name, companyPhone: building.company.phone });
   } catch (error) { next(error); }
 });
 
