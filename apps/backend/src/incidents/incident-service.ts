@@ -147,7 +147,7 @@ export async function joinIncident(userId: string, incidentId: string, draft: In
   if (draft.locationZone === 'apartment') {
     throw new Error('Apartment incidents cannot be joined');
   }
-  return prisma.$transaction(async (tx) => {
+  return joinedOnce(incidentId, () => prisma.$transaction(async (tx) => {
     const incident = await tx.incident.findFirstOrThrow({
       where: {
         id: incidentId,
@@ -189,11 +189,22 @@ export async function joinIncident(userId: string, incidentId: string, draft: In
     });
     await escalateIfNeeded(tx, incidentId);
     return { incident, alreadyJoined: false as const };
-  });
+  }));
+}
+
+// Two taps on "join" at the same moment: the second report hits the unique
+// report of the resident and is answered as "already joined", not an error.
+async function joinedOnce<T extends { alreadyJoined: boolean }>(incidentId: string, join: () => Promise<T>) {
+  try {
+    return await join();
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'P2002') throw error;
+    return { incident: await prisma.incident.findUniqueOrThrow({ where: { id: incidentId } }), alreadyJoined: true as const };
+  }
 }
 
 export async function joinPublicIncident(userId: string, incidentId: string, buildingId: string, apartmentId: string) {
-  return prisma.$transaction(async (tx) => {
+  return joinedOnce(incidentId, () => prisma.$transaction(async (tx) => {
     const incident = await tx.incident.findFirstOrThrow({
       where: {
         id: incidentId,
@@ -214,7 +225,7 @@ export async function joinPublicIncident(userId: string, incidentId: string, bui
     });
     await escalateIfNeeded(tx, incidentId);
     return { incident, alreadyJoined: false as const };
-  });
+  }));
 }
 
 export async function cancelResidentReport(userId: string, incidentId: string) {

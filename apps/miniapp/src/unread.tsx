@@ -13,10 +13,11 @@ const none: Counts = { incidents: 0, announcements: 0, emergencies: 0, polls: 0 
 const UnreadContext = createContext<Unread>({ ...none, refresh: async () => undefined });
 
 export function UnreadProvider({ children }: { children: ReactNode }) {
-  const { me, mode } = useSession();
+  const { me, mode, acting } = useSession();
   const [counts, setCounts] = useState<Counts>(none);
   const asResident = Boolean(me.residence) && mode === 'resident';
-  const asCompany = mode === 'company' && Boolean(me.admin);
+  // The platform administrator has no company until they choose one.
+  const asCompany = mode === 'company' && Boolean(me.admin) && Boolean(acting);
   const refresh = useCallback(async () => {
     try {
       if (asResident) { setCounts(await api.unread()); return; }
@@ -27,7 +28,7 @@ export function UnreadProvider({ children }: { children: ReactNode }) {
       }
       setCounts(none);
     } catch { /* the marks wait for the next check */ }
-  }, [asResident, asCompany]);
+  }, [asResident, asCompany, acting?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Close to real time: every 15 seconds while the app is on the screen, and
   // right away when the person comes back to it.
   useEffect(() => {

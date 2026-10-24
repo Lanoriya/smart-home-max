@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { ThemeProvider } from './theme';
 import { MaxUI, SnackbarProvider } from '@maxhub/max-ui';
 import { bridge } from './bridge';
@@ -134,9 +134,9 @@ function CurrentScreen() {
     case 'platform-duties': return <PlatformDutiesScreen />;
     case 'invite': return <InviteScreen token={screen.token} />;
     case 'desk': return <DeskScreen />;
-    case 'desk-incidents': return <DeskIncidentsScreen {...(screen.status ? { initialStatus: screen.status } : {})} />;
+    case 'desk-incidents': return <WithCompany><DeskIncidentsScreen {...(screen.status ? { initialStatus: screen.status } : {})} /></WithCompany>;
     case 'desk-incident': return <DeskIncidentScreen key={screen.id} reference={screen.id} />;
-    case 'desk-houses': return <DeskHousesScreen />;
+    case 'desk-houses': return <WithCompany><DeskHousesScreen /></WithCompany>;
     case 'desk-apartments': return <DeskApartmentsScreen buildingId={screen.buildingId} address={screen.address} />;
     case 'desk-announcements': return <DeskAnnouncementsScreen />;
     case 'desk-broadcast': return <DeskBroadcastScreen {...(screen.buildingId ? { buildingId: screen.buildingId } : {})} />;
@@ -149,6 +149,14 @@ function CurrentScreen() {
     case 'platform-bulk': return <PlatformBulkScreen {...(screen.companyId ? { companyId: screen.companyId } : {})} />;
     case 'platform-connect': return <PlatformConnectScreen {...(screen.point ? { point: screen.point } : {})} />;
   }
+}
+
+// The platform administrator opens a company tab before choosing a company:
+// the choice of the company comes first, as on the "Пульт" tab.
+function WithCompany({ children }: { children: ReactNode }) {
+  const { me, acting } = useSession();
+  if (!acting && me.admin?.role === 'platform_admin') return <DeskScreen />;
+  return <>{children}</>;
 }
 
 const tabIcons: Record<Tab, IconName> = { home: 'home', map: 'map', incidents: 'incidents', neighbours: 'people', polls: 'poll', services: 'siren', desk: 'desk', 'desk-incidents': 'incidents', 'desk-houses': 'building', platform: 'platform', more: 'more' };
