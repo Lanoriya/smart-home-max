@@ -1739,7 +1739,7 @@ export class IncidentFlow {
         ? `Проблема решена${feedback.answer.rating ? `, оценка ${feedback.answer.rating} из 5` : ''}`
         : 'Не решено — заявка возвращена в работу']
       : feedback?.canAnswer && feedback.until
-        ? [bold('Проблема действительно решена?'), `Ответьте до ${formatInZone(feedback.until, buildingZone(incident.building))}. Если нет — заявка вернётся в работу.`]
+        ? [bold('Проблема действительно решена?'), `Если нет — нажмите «Не решено», заявка вернётся в работу. Без ответа до ${formatInZone(feedback.until, buildingZone(incident.building))} работа будет считаться принятой.`]
         : [];
     const residents = `${incident._count.reports} ${plural(incident._count.reports, 'житель', 'жителя', 'жителей')}`;
     const zone = buildingZone(incident.building);

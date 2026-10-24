@@ -1,4 +1,5 @@
 import { prisma } from '../shared/prisma.js';
+import { acceptanceOf } from '../incidents/resident-feedback.js';
 
 // The numbers a company and the platform watch during a pilot. The main one is
 // "duplicates avoided": every neighbour who joined an existing common incident
@@ -26,7 +27,7 @@ export async function companyStats(companyId: string | null, days = 30) {
     // residents confirmed is the proof the work was really done.
     prisma.incident.findMany({
       where: { ...scope, status: 'resolved', resolvedAt: { gte: since } },
-      select: { resolvedAt: true, feedback: { select: { resolved: true, rating: true, updatedAt: true } } },
+      select: { status: true, resolvedAt: true, feedback: { select: { resolved: true, rating: true, updatedAt: true } } },
     }),
     prisma.incidentEvent.count({ where: { type: 'resident_reopened', createdAt: { gte: since }, ...(companyId ? { incident: { building: { companyId } } } : {}) } }),
   ]);
@@ -49,7 +50,12 @@ export async function companyStats(companyId: string | null, days = 30) {
 
   // Answers given to the latest "resolved" of each incident.
   const answers = resolvedInPeriod.map((incident) => incident.feedback.filter((item) => item.updatedAt >= incident.resolvedAt!));
-  const confirmedCount = answers.filter((items) => items.some((item) => item.resolved)).length;
+  // Silence is consent: no answer within the window means the work is accepted.
+  const states = resolvedInPeriod.map((incident) => acceptanceOf(incident, incident.feedback)?.state);
+  const confirmedCount = states.filter((state) => state === 'confirmed').length;
+  const silentCount = states.filter((state) => state === 'silent').length;
+  const pendingCount = states.filter((state) => state === 'waiting').length;
+  const acceptedCount = confirmedCount + silentCount;
   const ratings = answers.flatMap((items) => items.flatMap((item) => (item.resolved && item.rating ? [item.rating] : [])));
 
   return {
@@ -71,6 +77,11 @@ export async function companyStats(companyId: string | null, days = 30) {
     resolvedCount: resolvedInPeriod.length,
     confirmedCount,
     confirmedShare: resolvedInPeriod.length ? confirmedCount / resolvedInPeriod.length : null,
+    silentCount,
+    pendingCount,
+    // Accepted (confirmed or silent) out of all decided: accepted plus
+    // returned to work by residents.
+    acceptedShare: acceptedCount + reopenedCount ? acceptedCount / (acceptedCount + reopenedCount) : null,
     reopenedCount,
     ratingAverage: ratings.length ? Math.round((ratings.reduce((sum, value) => sum + value, 0) / ratings.length) * 10) / 10 : null,
     ratingsCount: ratings.length,

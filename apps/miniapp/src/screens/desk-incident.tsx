@@ -108,6 +108,12 @@ export function DeskIncidentScreen({ reference }: { reference: string }) {
           <CellSimple title={<span className="pre-wrap">{incident.callNote ?? incident.title}</span>} subtitle={[incident.callerName, incident.callerPhone].filter(Boolean).join(', ') || 'Звонивший не представился'} />
         </Section>
       ) : null}
+      {incident.acceptance ? (
+        <Section header="Приёмка работы">
+          <CellSimple title={incident.acceptance.state === 'confirmed' ? 'Принята: житель подтвердил' : incident.acceptance.state === 'silent' ? 'Принята: жители не ответили за 14 дней' : 'Ждём ответа жителей'}
+            subtitle={incident.acceptance.state === 'waiting' ? `До ${formatDate(incident.acceptance.until, zone)}. Без ответа работа будет считаться принятой.` : undefined} />
+        </Section>
+      ) : null}
       {incident.feedback.length ? (
         <Section header={`Ответ жителей: решено ${incident.feedbackSummary.confirmed}, не решено ${incident.feedbackSummary.returned}${incident.feedbackSummary.ratingAverage ? `, оценка ${incident.feedbackSummary.ratingAverage}` : ''}`}>
           {incident.feedback.map((item) => (

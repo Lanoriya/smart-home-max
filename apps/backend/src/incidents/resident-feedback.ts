@@ -107,6 +107,21 @@ export async function giveFeedback(userId: string, incidentId: string, input: z.
   });
 }
 
+// Silence is consent: when nobody answered within the window, the work of a
+// resolved incident counts as accepted. Nothing is written for that — the
+// state follows from the date of "resolved" and the answers, so it is the
+// same on the desk, in the figures and after a restart.
+export type Acceptance = { state: 'confirmed' | 'silent' | 'waiting'; until: Date };
+
+export function acceptanceOf(incident: { status: string; resolvedAt: Date | null }, answers: Array<{ resolved: boolean; updatedAt: Date }>, now = Date.now()): Acceptance | null {
+  if (incident.status !== 'resolved' || !incident.resolvedAt) return null;
+  const resolvedAt = incident.resolvedAt;
+  const until = new Date(resolvedAt.getTime() + windowMs);
+  // Only answers to the latest "resolved" count.
+  if (answers.some((answer) => answer.resolved && answer.updatedAt >= resolvedAt)) return { state: 'confirmed', until };
+  return { state: now > until.getTime() ? 'silent' : 'waiting', until };
+}
+
 // For the cards of the desk: who confirmed, who returned, and the ratings.
 export function feedbackSummary(items: Array<{ resolved: boolean; rating: number | null }>) {
   const ratings = items.flatMap((item) => (item.resolved && item.rating ? [item.rating] : []));

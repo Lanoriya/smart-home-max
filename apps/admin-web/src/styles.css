@@ -700,3 +700,6 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: .8; }
 .qr-preview { width: min(280px, 100%); margin: 18px auto 12px; padding: 12px; border-radius: var(--radius); background: #fff; }
 .qr-preview svg { display: block; width: 100%; height: auto; }
 .qr-link { display: block; margin: 0 0 14px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-small); background: var(--surface); font-size: 12px; overflow-wrap: anywhere; }
+.acceptance { margin: 6px 0 8px; padding: 8px 12px; border-radius: var(--radius-small); background: var(--surface); border: 1px solid var(--line); font-size: 14px; }
+.acceptance.confirmed, .acceptance.silent { border-left: 3px solid var(--green); }
+.acceptance.waiting { border-left: 3px solid var(--line); color: var(--ink-soft); }

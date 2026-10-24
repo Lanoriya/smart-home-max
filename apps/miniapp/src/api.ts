@@ -82,7 +82,7 @@ export type Stats = {
   open: number; newOnes: number; overdue: number; reactionMinutesMedian: number | null; resolveHoursMedian: number | null;
   onTimeShare: number | null; residents: number; buildings: number; buildingsOnMap: number;
   topCategories: Array<{ category: Category; count: number }>;
-  resolvedCount: number; confirmedShare: number | null; confirmedCount: number; reopenedCount: number; ratingAverage: number | null; ratingsCount: number; phoneIncidents: number;
+  resolvedCount: number; confirmedShare: number | null; acceptedShare: number | null; silentCount: number; pendingCount: number; confirmedCount: number; reopenedCount: number; ratingAverage: number | null; ratingsCount: number; phoneIncidents: number;
 };
 
 export type DeskIncident = {
@@ -98,6 +98,7 @@ export type DeskIncidentDetail = {
   source: 'resident' | 'phone'; callerName: string | null; callerPhone: string | null; callNote: string | null;
   feedback: Array<{ id: string; resolved: boolean; rating: number | null; comment: string | null; updatedAt: string; apartment: { number: string } | null }>;
   feedbackSummary: { confirmed: number; returned: number; ratingAverage: number | null };
+  acceptance: { state: 'confirmed' | 'silent' | 'waiting'; until: string } | null;
   reports: Array<{ id: string; description: string; createdAt: string; apartment: { number: string } | null; author: { displayName: string | null } }>;
   events: Array<{ id: string; type: string; payload: Record<string, unknown>; createdAt: string }>;
   comments: Array<{ id: string; text: string; createdAt: string; apartment: { number: string } | null }>;

@@ -7,7 +7,7 @@ import { viaBuilding, type AdminActor } from '../auth/scope.js';
 import { type Html, blocks, bold, html } from '../shared/html.js';
 import type { CallbackButton } from '../bot/messenger.js';
 import { buildingZone, formatInZone } from '../shared/time-zone.js';
-import { feedbackSummary } from './resident-feedback.js';
+import { acceptanceOf, feedbackSummary } from './resident-feedback.js';
 
 // Incident work of a company administrator. Shared by the web dispatcher desk
 // and the mini-app so both follow the same rules and notify residents alike.
@@ -124,7 +124,7 @@ export async function getIncident(companyId: string | null, id: string) {
   if (!incident) return null;
   const timeZone = buildingZone(incident.building);
   // The latest answer of each resident who reported the incident.
-  return { ...incident, timeZone, legalTerm: legalTermOf({ ...incident, timeZone }), feedbackSummary: feedbackSummary(incident.feedback) };
+  return { ...incident, timeZone, legalTerm: legalTermOf({ ...incident, timeZone }), feedbackSummary: feedbackSummary(incident.feedback), acceptance: acceptanceOf(incident, incident.feedback) };
 }
 
 function findIncident(companyId: string | null, id: string) {
@@ -330,6 +330,6 @@ export function notificationText(incident: {
       incident.rejectionReason ? `Причина отклонения: ${incident.rejectionReason}` : null,
     ],
     incident.comment ? [bold('Сообщение УК'), incident.comment] : [],
-    incident.askFeedback ? [bold('Проблема действительно решена?'), 'Если нет — нажмите «Не решено»: заявка сразу вернётся в работу, а УК получит уведомление.'] : [],
+    incident.askFeedback ? [bold('Проблема действительно решена?'), 'Если нет — нажмите «Не решено»: заявка сразу вернётся в работу, а УК получит уведомление. Если не ответить за 14 дней, работа будет считаться принятой.'] : [],
   );
 }

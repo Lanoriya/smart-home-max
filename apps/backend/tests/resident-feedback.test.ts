@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { feedbackOpen, feedbackSchema, feedbackSummary, feedbackWindowDays } from '../src/incidents/resident-feedback.js';
+import { acceptanceOf, feedbackOpen, feedbackSchema, feedbackSummary, feedbackWindowDays } from '../src/incidents/resident-feedback.js';
 import { feedbackButtons, notificationText } from '../src/incidents/admin-incidents.js';
 import { houseFromStartPayload, houseLink } from '../src/buildings/house-link.js';
 import { signFor } from '../src/bot/button-emoji.js';
@@ -27,6 +27,17 @@ describe('resident feedback after "resolved"', () => {
     expect(feedbackSummary([{ resolved: true, rating: 5 }, { resolved: true, rating: 4 }, { resolved: true, rating: null }, { resolved: false, rating: null }]))
       .toEqual({ confirmed: 3, returned: 1, ratingAverage: 4.5 });
     expect(feedbackSummary([])).toEqual({ confirmed: 0, returned: 0, ratingAverage: null });
+  });
+
+  it('counts silence after the window as acceptance', () => {
+    const now = Date.now();
+    const resolvedAt = new Date(now - (feedbackWindowDays + 1) * day);
+    expect(acceptanceOf({ status: 'resolved', resolvedAt }, [], now)?.state).toBe('silent');
+    expect(acceptanceOf({ status: 'resolved', resolvedAt: new Date(now - day) }, [], now)?.state).toBe('waiting');
+    expect(acceptanceOf({ status: 'resolved', resolvedAt: new Date(now - day) }, [{ resolved: true, updatedAt: new Date(now) }], now)?.state).toBe('confirmed');
+    // A "yes" given before the latest "resolved" belongs to the previous round.
+    expect(acceptanceOf({ status: 'resolved', resolvedAt }, [{ resolved: true, updatedAt: new Date(resolvedAt.getTime() - day) }], now)?.state).toBe('silent');
+    expect(acceptanceOf({ status: 'in_progress', resolvedAt: null }, [], now)).toBeNull();
   });
 
   it('asks the resident in the "resolved" notification', () => {

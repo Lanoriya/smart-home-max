@@ -96,7 +96,7 @@ function Feedback({ incident, busy, onConfirm, onReturn }: { incident: IncidentD
   }
   return (
     <Section header="Проблема действительно решена?">
-      <CellSimple subtitle={`УК отметила заявку как устранённую. Если это не так, верните её в работу${until ? ` — до ${formatDate(until, incident.timeZone)}` : ''}.`} />
+      <CellSimple subtitle={`УК отметила заявку как устранённую. Если это не так, верните её в работу.${until ? ` Без ответа до ${formatDate(until, incident.timeZone)} работа будет считаться принятой.` : ''}`} />
       <div className="feedback-box feedback-actions">
         <Button size="medium" stretched loading={busy === 'feedback'} onClick={() => onConfirm()}>Да, решено</Button>
         <Button size="medium" stretched variant="secondary" onClick={onReturn}>Не решено</Button>
