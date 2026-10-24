@@ -6,7 +6,7 @@ import { useNavigation } from '../nav';
 import { useLoad } from '../session';
 import { Actions, Failure, Field, Loading, Page, Plate, Section, StatusChip, Sheet, PhotoStrip } from '../components/ui';
 import { CategoryTile, IconTile } from '../components/icons';
-import { ago, categoryLabels, formatDate, fromZoneInput, place, plural, priorityLabels, statusLabels, termLeft, toZoneInput } from '../labels';
+import { ago, categoryLabels, formatDate, formatPhone, fromZoneInput, place, plural, priorityLabels, statusLabels, termLeft, toZoneInput } from '../labels';
 
 // One incident on the company desk: who reported it, what the residents say,
 // and the actions of the dispatcher. Every change is sent to all residents who
@@ -105,7 +105,7 @@ export function DeskIncidentScreen({ reference }: { reference: string }) {
 
       {incident.source === 'phone' ? (
         <Section header="Принята по телефону">
-          <CellSimple title={<span className="pre-wrap">{incident.callNote ?? incident.title}</span>} subtitle={[incident.callerName, incident.callerPhone].filter(Boolean).join(', ') || 'Звонивший не представился'} />
+          <CellSimple title={<span className="pre-wrap">{incident.callNote ?? incident.title}</span>} subtitle={[incident.callerName, incident.callerPhone ? formatPhone(incident.callerPhone) : null].filter(Boolean).join(', ') || 'Звонивший не представился'} />
         </Section>
       ) : null}
       {incident.acceptance ? (

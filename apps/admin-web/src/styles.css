@@ -582,6 +582,9 @@ body::before { content: ''; position: fixed; inset: 0; z-index: -1; background: 
 .connect-grid { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); }
 .connect-map { display: grid; grid-template-rows: minmax(420px, 60vh) auto; gap: 8px; padding: 18px 20px; border-left: 1px solid var(--line-soft); }
 .connect-map .leaflet-container { border-radius: var(--radius-small); }
+/* Leaflet panes carry z-index up to 1000: keep them inside the map, under
+   drawers, pickers and notices of the page. */
+.leaflet-container { isolation: isolate; z-index: 0; }
 .map-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
 .legend-dot { display: inline-block; width: 10px; height: 10px; margin-right: -8px; border-radius: 50%; }
 .legend-dot.own { background: #1f4e8c; }

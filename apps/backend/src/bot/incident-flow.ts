@@ -37,6 +37,7 @@ import { codeAttemptsLeft, registerCodeFailure } from '../residents/code-attempt
 import { canClearApartmentData, clearApartmentData } from '../residents/apartment-data.js';
 import { feedbackOpen, feedbackState, giveFeedback, type FeedbackResult } from '../incidents/resident-feedback.js';
 import { feedbackButtons } from '../incidents/admin-incidents.js';
+import { contractKey } from '../shared/contract.js';
 
 const sessionDataSchema = z.object({
   apartmentId: z.string().uuid().optional(),
@@ -431,9 +432,9 @@ export class IncidentFlow {
       const building = data.buildingId ? await prisma.building.findUnique({ where: { id: data.buildingId }, select: { accessCode: true } }) : null;
       // The contract of this apartment is enough to connect, as in the app.
       const contract = data.apartmentId ? await prisma.apartment.findUnique({ where: { id: data.apartmentId }, select: { contractNumber: true } }) : null;
-      const typed = text.replace(/[\s-]/g, '');
+      const typed = contractKey(text);
       // Checked first: the same number as the house code still counts as the contract.
-      if (data.apartmentId && contract?.contractNumber && typed.length >= 4 && typed === contract.contractNumber.replace(/[\s-]/g, '')) {
+      if (data.apartmentId && contract?.contractNumber && typed.length >= 4 && typed === contractKey(contract.contractNumber)) {
         await this.confirmApartmentMembership(maxUserId, user.id, data.apartmentId, data.apartmentNumber);
         return true;
       }
@@ -1151,11 +1152,16 @@ export class IncidentFlow {
 
   private async askDescription(maxUserId: string, userId: string, data: SessionData) {
     await this.saveSession(userId, 'description', data);
-    const place = data.affectedApartmentNumber
+    // "Водоснабжение, весь дом", "Уборка, лифт, подъезд 2", "Лифт, подъезд 1".
+    const category = data.category ? categoryLabels[data.category] : null;
+    const zone = data.affectedApartmentNumber
       ? `квартира ${data.affectedApartmentNumber}`
-      : data.entranceNumber
-      ? `${zoneLabels[data.locationZone ?? '']}, подъезд ${data.entranceNumber}`
-      : zoneLabels[data.locationZone ?? ''];
+      : data.locationZone === 'common'
+      ? 'весь дом'
+      : data.locationZone === 'entrance' && data.entranceNumber
+      ? null
+      : zoneLabels[data.locationZone ?? '']?.toLowerCase() ?? null;
+    const place = [category, zone === category?.toLowerCase() ? null : zone, data.entranceNumber ? `подъезд ${data.entranceNumber}` : null].filter(Boolean).join(', ');
     await this.messenger.sendMessageToUser(maxUserId, `Опишите проблему. Выбрано: ${place}. Фото можно приложить позднее, уже после создания заявки.`, [
       [{ text: 'Отмена', payload: 'flow:cancel', intent: 'negative' }],
     ]);

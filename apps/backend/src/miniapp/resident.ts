@@ -25,6 +25,7 @@ import { buildingZone, companyZone } from '../shared/time-zone.js';
 import { codeAttemptsLeft, registerCodeFailure } from '../residents/code-attempts.js';
 import { canClearApartmentData, clearApartmentData } from '../residents/apartment-data.js';
 import { feedbackSchema, feedbackState, giveFeedback } from '../incidents/resident-feedback.js';
+import { contractKey } from '../shared/contract.js';
 
 // What a resident does in the mini-app. The rules are the bot's rules: the
 // same codes, the same shared incidents, the same privacy of apartment issues.
@@ -161,7 +162,7 @@ const residenceSchema = z.object({
   consent: z.boolean().optional(),
 }).refine((value) => Boolean(value.buildingCode) || Boolean(value.contractNumber), { message: 'A house code or a contract number is required' });
 
-const contractDigits = (value: string) => value.replace(/[\s-]/g, '');
+const contractDigits = contractKey;
 
 // Connecting to an apartment: the code of the house, then the personal code
 // of the apartment if the company set one, or approval of the residents who

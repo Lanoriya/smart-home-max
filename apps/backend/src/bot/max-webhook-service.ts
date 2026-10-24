@@ -102,8 +102,10 @@ export class MaxWebhookService {
       // The callback is not acknowledged through /answers: an answer with a
       // message replaces the pressed message with that text ("Принято"), and
       // every button already gets a full reply from the bot.
+      // A button the bot no longer knows (an old message, a deleted house or
+      // poll) still gets an answer instead of silence.
       const payload = update.callback?.payload;
-      if (payload) await incidentFlow.handleCallback(userId, payload);
+      if (payload && !(await incidentFlow.handleCallback(userId, payload))) await incidentFlow.sendStaleDialog(userId);
     }
   }
 }
