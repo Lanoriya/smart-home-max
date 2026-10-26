@@ -39,6 +39,10 @@ const envSchema = z
     ),
     // MAX accounts that open the mini-app as platform administrators.
     PLATFORM_ADMIN_MAX_USER_IDS: z.string().default('').transform((value) => value.split(',').map((item) => item.trim()).filter(Boolean)),
+    // Secrets of the jury links ?start=jury_uk_<token> and ?start=jury_admin_<token>:
+    // an employee of the demo company and a platform administrator. Empty — off.
+    JURY_UK_LINK_TOKEN: z.preprocess((value) => (value === '' ? undefined : value), z.string().regex(/^[A-Za-z0-9_-]{12,100}$/).optional()),
+    JURY_ADMIN_LINK_TOKEN: z.preprocess((value) => (value === '' ? undefined : value), z.string().regex(/^[A-Za-z0-9_-]{12,100}$/).optional()),
     // Local development only: lets the mini-app run in a usual browser with
     // the X-Dev-Max-User-Id header instead of signed MAX launch data.
     MINIAPP_DEV_AUTH: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),

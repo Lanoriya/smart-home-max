@@ -5,6 +5,7 @@ import { logger } from '../shared/logger.js';
 import { IncidentFlow } from './incident-flow.js';
 import { ScreenMessenger } from './screen-messenger.js';
 import { houseFromStartPayload } from '../buildings/house-link.js';
+import { grantJuryRole, juryRoleFromStartPayload } from '../auth/jury-link.js';
 
 export class MaxWebhookService {
   constructor(private readonly messenger: Messenger) {}
@@ -63,6 +64,31 @@ export class MaxWebhookService {
       if (startPayload?.startsWith('invite_') && /^invite_[A-Za-z0-9_-]{10,200}$/.test(startPayload)) {
         await this.messenger.sendMessageToUser(userId, 'Вас пригласили в команду управляющей компании в сервисе «Домовед». Откройте приложение, чтобы принять приглашение.', [
           [{ text: 'Принять приглашение', payload: startPayload, openApp: true }],
+          [{ text: 'В главное меню', payload: 'menu:main' }],
+        ]);
+        return;
+      }
+      // https://max.ru/<bot>?start=jury_uk_… / jury_admin_… — the links of the jury.
+      const juryRole = juryRoleFromStartPayload(startPayload);
+      if (juryRole === 'expired') {
+        await this.messenger.sendMessageToUser(userId, 'Демо-доступ для жюри закончился 5 ноября. Сервисом можно пользоваться как житель.', [
+          [{ text: 'В главное меню', payload: 'menu:main' }],
+        ]);
+        return;
+      }
+      if (juryRole) {
+        const grant = await grantJuryRole(userId, getMaxUserName(update), juryRole);
+        const text = grant.ok
+          ? (grant.role === 'admin'
+            ? 'Вы — администратор платформы «Домовед»: все управляющие компании, подключение УК из реестра и пульт любой УК. Откройте приложение.'
+            : `Вы — сотрудник УК «${grant.companyName}» в сервисе «Домовед». Откройте приложение: пульт с заявками, домами, опросами и приёмом граждан.`)
+          : grant.code === 'platform_admin'
+            ? 'Вы уже администратор платформы — пульт любой УК доступен в приложении.'
+            : grant.code === 'admin_of_another_company'
+              ? 'Вы уже сотрудник другой управляющей компании, роль не изменена.'
+              : 'Демо-УК пока не настроена.';
+        await this.messenger.sendMessageToUser(userId, text, [
+          [{ text: 'Открыть приложение', payload: 'desk', openApp: true }],
           [{ text: 'В главное меню', payload: 'menu:main' }],
         ]);
         return;
