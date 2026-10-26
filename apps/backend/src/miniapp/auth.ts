@@ -42,7 +42,11 @@ function readUser(request: Request): MiniAppUser | 'expired' | null {
 
 export async function requireMiniAppUser(request: Request, response: Response, next: NextFunction) {
   try {
-    const identity = readUser(request) ?? await webDeskUser(request);
+    const direct = readUser(request);
+    const web = direct ? null : await webDeskAdmin(request);
+    // An account of the web desk without MAX (a password sign-in, like the
+    // jury accounts) acts as itself under a stand-in id that MAX never sends.
+    const identity = direct ?? (web ? { maxUserId: web.maxUserId ?? `web-${web.id}`, displayName: null, username: null } : null);
     if (identity === 'expired') { response.status(401).json({ code: 'launch_data_expired' }); return; }
     if (!identity) { response.status(401).json({ code: 'launch_data_required' }); return; }
 
@@ -52,7 +56,7 @@ export async function requireMiniAppUser(request: Request, response: Response, n
       update: { ...(identity.displayName ? { displayName: identity.displayName } : {}), ...(identity.username ? { maxUsername: identity.username } : {}) },
       select: { id: true, maxUserId: true, displayName: true },
     });
-    const admin = await resolveAdmin(identity);
+    const admin = web && !web.maxUserId ? web : await resolveAdmin(identity);
     response.locals.miniApp = {
       user,
       admin: admin ? { id: admin.id, username: admin.username, role: admin.role, companyId: admin.companyId } : null,
@@ -64,13 +68,15 @@ export async function requireMiniAppUser(request: Request, response: Response, n
 }
 
 // The web desk calls the same API with its session cookie: the signed-in
-// administrator acts as their MAX account. The cookie is SameSite=Strict, and
-// the extra header cannot be set by a form of another site either.
-async function webDeskUser(request: Request): Promise<MiniAppUser | null> {
+// administrator acts as their MAX account, or as themselves without one. The
+// cookie is SameSite=Strict, and the extra header cannot be set by a form of
+// another site either.
+async function webDeskAdmin(request: Request): Promise<Admin | null> {
   if (request.header('authorization') || request.header('x-web-desk') !== '1') return null;
   const session = await getAuthenticatedAdmin(request);
-  const maxUserId = session?.admin.maxUserId;
-  return maxUserId ? { maxUserId, displayName: null, username: null } : null;
+  if (!session) return null;
+  const { company: _company, ...admin } = session.admin;
+  return admin;
 }
 
 // MAX accounts listed in PLATFORM_ADMIN_MAX_USER_IDS get a platform
