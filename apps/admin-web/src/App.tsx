@@ -158,6 +158,20 @@ export function App() {
   const [notice, setNotice] = useState<Notice | null>(null);
 
   function notify(text: string, tone: Notice['tone'] = 'success') { setNotice({ text, tone }); }
+  // Giving up one's own access: the same as in the bot and the mini-app.
+  async function leaveAdmin() {
+    const what = isPlatform ? 'администратора платформы' : 'сотрудника УК';
+    if (!window.confirm(`Отвязаться от админки? Права ${what} пропадут сразу — здесь, в боте и в приложении MAX. Вернуться можно только по новому приглашению.`)) return;
+    try {
+      await api('/api/app/admin/leave', { method: 'POST' });
+      setAdmin(null);
+    } catch (failure) {
+      const code = failure instanceof ApiError ? failure.code : null;
+      notify(code === 'demo_account' ? 'Это демонстрационный аккаунт для жюри, его отвязать нельзя.'
+        : code === 'platform_admin_from_env' ? 'Этот администратор задан в настройках сервера — снять права можно только там.'
+          : 'Не удалось отвязаться от админки.', 'error');
+    }
+  }
   useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(null), 4500);
@@ -287,6 +301,7 @@ export function App() {
           <div className="user-area">
             <div className={`health ${health}`} title="Связь диспетчерской с сервером. Если связи нет, изменения не сохранятся."><span /> {health === 'online' ? 'Сервер на связи' : health === 'checking' ? 'Проверяем связь…' : 'Нет связи с сервером'}</div>
             <button className="text-button theme-toggle" type="button" onClick={toggleTheme} aria-pressed={theme === 'dark'} title="Переключить светлую и тёмную тему">{theme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</button>
+            <button className="text-button" type="button" onClick={() => void leaveAdmin()} title="Снять с себя права сотрудника УК или администратора платформы">Отвязаться от админки</button>
             <button className="text-button" onClick={async () => { await api('/api/admin/session', { method: 'DELETE' }); setAdmin(null); }}>Выйти</button>
           </div>
         </header>

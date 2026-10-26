@@ -182,6 +182,8 @@ export const api = {
     request<{ status: 'bound' | 'join_requested' | 'apartment_code_required'; notified?: number }>('POST', '/residence', body),
   leaveResidence: () => request<{ apartmentId: string | null; canClearData: boolean }>('DELETE', '/residence'),
   clearPreviousApartment: (apartmentId: string) => request<void>('POST', '/residence/clear', { apartmentId }),
+  // Giving up one's own access: a company employee or a platform administrator.
+  leaveAdmin: () => request<{ ok: true }>('POST', '/admin/leave'),
   cancelJoin: () => request<void>('DELETE', '/join-request'),
   incidents: (scope: 'mine' | 'building' | 'archive') => request<{ items: IncidentSummary[] }>('GET', `/incidents?scope=${scope}`).then((data) => data.items),
   incident: (ref: string | number) => request<{ item: IncidentDetail }>('GET', `/incidents/${ref}`).then((data) => data.item),
@@ -326,6 +328,8 @@ export function errorText(error: unknown): string {
     invalid_building_code: 'Код дома — ровно 10 цифр.',
     invalid_apartment_codes: 'Код квартиры — от 6 символов, номер договора — от 4 цифр или букв.',
     cannot_remove_platform_admin: 'Главного администратора удалить нельзя.',
+    platform_admin_from_env: 'Этот администратор задан в настройках сервера — снять права можно только там.',
+    demo_account: 'Это демонстрационный аккаунт для жюри, его нельзя убрать.',
     invalid_chat_link: 'Ссылка не подходит. Скопируйте ссылку-приглашение чата из MAX: она начинается с https://max.ru/',
     poll_closed: 'Опрос уже завершён.',
     vote_final: 'В этом опросе голос нельзя изменить.',

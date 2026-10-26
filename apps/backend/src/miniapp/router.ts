@@ -6,6 +6,7 @@ import { neighboursRouter } from './neighbours.js';
 import { companyRouter } from './company.js';
 import { platformRouter } from './platform.js';
 import { acceptInvite, invitePrefix, previewInvite } from './invites.js';
+import { leaveAdmin } from '../auth/leave-admin.js';
 import { requireMiniAppAdmin } from './auth.js';
 import { lookupHouse, searchRegistryCompanies } from '../registry/lookup.js';
 import { locateAddress, resolveAddress, suggestAddresses, suggestCities, type CityRef } from '../registry/geosearch.js';
@@ -38,6 +39,17 @@ miniAppRouter.post('/invites/accept', async (request, response, next) => {
     const { user } = miniApp(response);
     const result = await acceptInvite(user, parsed.data.token);
     if (!result.ok) { response.status(result.code === 'invite_not_found' ? 404 : 409).json({ code: result.code }); return; }
+    response.json(result);
+  } catch (error) { next(error); }
+});
+
+// Giving up one's own access: a company employee or a platform administrator.
+miniAppRouter.post('/admin/leave', async (_request, response, next) => {
+  try {
+    const actor = miniApp(response).admin;
+    if (!actor) { response.status(404).json({ code: 'admin_not_found' }); return; }
+    const result = await leaveAdmin(actor.id);
+    if (!result.ok) { response.status(result.code === 'admin_not_found' ? 404 : 409).json({ code: result.code }); return; }
     response.json(result);
   } catch (error) { next(error); }
 });

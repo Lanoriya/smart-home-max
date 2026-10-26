@@ -39,6 +39,12 @@ export function MoreScreen() {
       }
     } catch (error) { showSnackbar({ text: errorText(error) }); }
   };
+  // A company employee or the platform administrator gives up their access.
+  const leaveAdmin = async () => {
+    const what = me.admin?.role === 'platform_admin' ? 'администратора платформы' : `сотрудника «${me.admin?.company?.name ?? 'УК'}»`;
+    if (!await confirm({ text: `Отвязаться от админки? Права ${what} пропадут сразу — в приложении, в боте и в веб-версии. Вернуться можно только по новому приглашению.`, confirm: 'Отвязаться', destructive: true })) return;
+    try { await api.leaveAdmin(); setMode('resident'); await refresh(); showSnackbar({ text: 'Вы отвязались от админки' }); } catch (error) { showSnackbar({ text: errorText(error) }); }
+  };
   // The platform administrator in the administration mode is not a resident.
   const isPlatform = mode === 'platform';
   return (
@@ -64,10 +70,12 @@ export function MoreScreen() {
             </span>
             <Switch checked={me.admin.legalReminders} disabled={savingReminders} onChange={(event) => void setReminders(event.target.checked)} />
           </label>
-          <CellAction mode="destructive" onClick={async () => {
-            if (!await confirm({ text: `Выйти из сотрудников «${me.admin?.company?.name ?? 'УК'}»? Доступ к пульту пропадёт сразу. Вернуться можно только по новому приглашению.`, confirm: 'Выйти', destructive: true })) return;
-            try { await api.desk.leave(); setMode('resident'); await refresh(); showSnackbar({ text: 'Вы больше не сотрудник УК' }); } catch (error) { showSnackbar({ text: errorText(error) }); }
-          }}>Выйти из сотрудников УК</CellAction>
+          <CellAction mode="destructive" onClick={() => void leaveAdmin()}>Отвязаться от админки</CellAction>
+        </Section>
+      ) : null}
+      {me.admin?.role === 'platform_admin' && isPlatform ? (
+        <Section header="Администратор платформы">
+          <CellAction mode="destructive" onClick={() => void leaveAdmin()}>Отвязаться от админки</CellAction>
         </Section>
       ) : null}
       <Section header="Справка">

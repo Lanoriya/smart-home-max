@@ -80,7 +80,7 @@ export function TeamManager({ isPlatform, onLeft, onNotice }: { isPlatform: bool
   };
   const leave = async () => {
     if (!window.confirm('Выйти из сотрудников УК? Доступ к пульту пропадёт сразу. Вернуться можно только по новому приглашению.')) return;
-    try { await api(app('/company/leave'), { method: 'POST' }); onNotice('Вы больше не сотрудник УК.'); onLeft(); } catch { onNotice('Не удалось выйти из сотрудников.', 'error'); }
+    try { await api(app('/admin/leave'), { method: 'POST' }); onNotice('Вы больше не сотрудник УК.'); onLeft(); } catch (failure) { onNotice(failure instanceof ApiError && failure.code === 'demo_account' ? 'Это демонстрационный аккаунт для жюри, его отвязать нельзя.' : 'Не удалось выйти из сотрудников.', 'error'); }
   };
   return <section className="panel">
     <div className="panel-head"><div><h2>Сотрудники УК</h2><p className="form-hint">Сотрудник открывает ссылку-приглашение в MAX и получает пульт: в приложении и здесь, по кнопке «Веб-диспетчерская» в боте.</p></div>

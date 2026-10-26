@@ -11,6 +11,7 @@ import { inviteCodeMatches } from '../users/invite-code.js';
 import { buildingCodeMatches } from '../buildings/access-code.js';
 import { normalizeRussianPhone } from '../shared/phone.js';
 import { createWebLoginLink } from '../auth/web-link.js';
+import { leaveAdmin } from '../auth/leave-admin.js';
 import { publicPhotoUrl } from '../routes/photos.js';
 import { logger } from '../shared/logger.js';
 import type { SharedContact } from './max-update.js';
@@ -755,6 +756,10 @@ export class IncidentFlow {
     }
     if (payload === 'staff:reminders' || payload === 'staff:reminders:on' || payload === 'staff:reminders:off') {
       await this.showLegalReminders(maxUserId, payload === 'staff:reminders' ? undefined : payload === 'staff:reminders:on');
+      return true;
+    }
+    if (payload === 'staff:leave' || payload === 'staff:leave:confirm') {
+      await this.leaveAdminAccess(maxUserId, payload === 'staff:leave:confirm');
       return true;
     }
     if (payload === 'city:change') {
@@ -1552,6 +1557,36 @@ export class IncidentFlow {
     ]);
   }
 
+  // Giving up the access to the desk or to the platform: asked first, then
+  // the same as in the mini-app and the web desk.
+  private async leaveAdminAccess(maxUserId: string, confirmed: boolean) {
+    const admin = await prisma.admin.findUnique({ where: { maxUserId }, select: { id: true, role: true, companyId: true, company: { select: { name: true } } } });
+    if (!admin || (!admin.companyId && admin.role !== 'platform_admin')) {
+      await this.messenger.sendMessageToUser(maxUserId, 'Вы не сотрудник УК и не администратор платформы.', mainMenuLinkButtons());
+      return;
+    }
+    const what = admin.role === 'platform_admin' ? 'администратора платформы' : `сотрудника УК «${admin.company?.name ?? ''}»`;
+    if (!confirmed) {
+      await this.messenger.sendMessageToUser(maxUserId, blocks(
+        [bold('Отвязаться от админки?')],
+        [`Права ${what} пропадут сразу: в боте, в приложении и в веб-версии. Вернуться можно только по новому приглашению.`],
+      ), [
+        [{ text: 'Да, отвязаться', payload: 'staff:leave:confirm', intent: 'negative' }],
+        [{ text: 'В главное меню', payload: 'menu:main' }],
+      ]);
+      return;
+    }
+    const result = await leaveAdmin(admin.id);
+    const text = result.ok
+      ? `Готово: вы больше не ${admin.role === 'platform_admin' ? 'администратор платформы' : 'сотрудник УК'}. Как житель вы можете пользоваться ботом как раньше.`
+      : result.code === 'platform_admin_from_env'
+        ? 'Этот администратор платформы задан в настройках сервера (PLATFORM_ADMIN_MAX_USER_IDS) — снять права можно только там.'
+        : result.code === 'demo_account'
+          ? 'Это демонстрационный аккаунт для жюри, его отвязать нельзя.'
+          : 'Вы не сотрудник УК и не администратор платформы.';
+    await this.messenger.sendMessageToUser(maxUserId, text, mainMenuLinkButtons());
+  }
+
   private async showBotInfo(maxUserId: string) {
     const item = (title: string, text: string) => html`${bold(title)} — ${text}`;
     await this.messenger.sendMessageToUser(maxUserId, blocks(
@@ -2320,12 +2355,14 @@ async function deskButton(maxUserId: string, resident: boolean): Promise<Callbac
   const admin = await prisma.admin.findUnique({ where: { maxUserId }, select: { companyId: true, role: true, legalReminders: true } });
   if (!admin || (!admin.companyId && admin.role !== 'platform_admin')) return [];
   const app: CallbackButton[][] = resident ? [] : [[{ text: 'Открыть приложение', payload: 'desk', openApp: true }]];
-  if (admin.role === 'platform_admin') return [...app, [{ text: 'Веб-админка платформы', payload: 'desk:web' }]];
+  const leave = [{ text: 'Отвязаться от админки', payload: 'staff:leave' }];
+  if (admin.role === 'platform_admin') return [...app, [{ text: 'Веб-админка платформы', payload: 'desk:web' }], leave];
   return [
     ...app,
     [{ text: 'Веб-диспетчерская УК', payload: 'desk:web' }],
     ...(resident ? [[{ text: 'QR-коды домов', payload: 'staff:qr' }]] : []),
     [{ text: admin.legalReminders ? 'Напоминания о сроках: вкл.' : 'Напоминания о сроках: выкл.', payload: 'staff:reminders' }],
+    leave,
   ];
 }
 
@@ -2463,7 +2500,7 @@ function pageLine(page: number, pages: number, total: number) {
 // choosing an address and answering or cancelling a join request.
 const menuLater = 'Главное меню откроется, когда вы выберете дом и квартиру — здесь или в приложении.';
 
-const openPayloads = new Set(['menu:main', 'flow:cancel', 'uk:contacts', 'uk:duties', 'emergency:services', 'bot:info', 'address:search', 'address:browse', 'city:change', 'desk:web', 'staff:reminders', 'staff:reminders:on', 'staff:reminders:off', 'staff:qr', 'apartment:change', 'apartment:change:confirm', 'join:cancel', 'join:status']);
+const openPayloads = new Set(['menu:main', 'flow:cancel', 'uk:contacts', 'uk:duties', 'emergency:services', 'bot:info', 'address:search', 'address:browse', 'city:change', 'desk:web', 'staff:reminders', 'staff:reminders:on', 'staff:reminders:off', 'staff:qr', 'staff:leave', 'staff:leave:confirm','apartment:change', 'apartment:change:confirm', 'join:cancel', 'join:status']);
 const openPrefixes = ['staff:qr:', 'consent:accept:', 'building:choose:', 'city:choose:', 'street:choose:', 'join:approve:', 'join:reject:', 'incident:accept:', 'incident:rate:', 'incident:reopen:', 'incident:reopen-now:'];
 function opensWithoutAddress(payload: string) {
   return openPayloads.has(payload) || openPrefixes.some((prefix) => payload.startsWith(prefix));

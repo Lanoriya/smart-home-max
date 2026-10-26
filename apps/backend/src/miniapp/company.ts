@@ -15,6 +15,7 @@ import { createInvite } from './invites.js';
 import { createWebLoginLink } from '../auth/web-link.js';
 import { revokeAdminAccess } from '../auth/revoke-admin.js';
 import { juryDemoUsername } from '../auth/jury-link.js';
+import { leaveAdmin } from '../auth/leave-admin.js';
 import { buildingCodePattern } from '../buildings/access-code.js';
 import { hashInviteCode } from '../users/invite-code.js';
 import { env } from '../config/env.js';
@@ -430,9 +431,8 @@ companyRouter.post('/leave', async (_request, response, next) => {
   try {
     const actor = admin(response);
     if (actor.role === 'platform_admin') { response.status(409).json({ code: 'cannot_remove_platform_admin' }); return; }
-    const record = await prisma.admin.findUniqueOrThrow({ where: { id: actor.id }, select: { id: true, displayName: true, username: true, companyId: true } });
-    await prisma.$transaction((tx) => revokeAdminAccess(tx, record));
-    await writeAdminAudit(prisma, actor.id, 'company_admin_left', 'admin', actor.id, { companyId: record.companyId });
+    const result = await leaveAdmin(actor.id);
+    if (!result.ok) { response.status(409).json({ code: result.code }); return; }
     response.status(204).end();
   } catch (error) { next(error); }
 });
