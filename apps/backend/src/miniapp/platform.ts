@@ -7,6 +7,7 @@ import { miniApp, requirePlatformAdmin } from './auth.js';
 import { companyCardSchema, withOfficePoint } from './company.js';
 import { createInvite } from './invites.js';
 import { revokeAdminAccess } from '../auth/revoke-admin.js';
+import { juryDemoUsername } from '../auth/jury-link.js';
 import { dutiesSchema, lawDuties, platformDuties, savePlatformDuties } from '../companies/duties.js';
 import { defaultPrivacy, getPrivacy, privacySchema, savePrivacy } from '../companies/privacy.js';
 import { deleteBuildingData } from '../buildings/delete-building.js';
@@ -170,6 +171,7 @@ platformRouter.delete('/admins/:id', async (request, response, next) => {
     const target = await prisma.admin.findUnique({ where: { id: String(request.params.id) }, select: { id: true, role: true, companyId: true, displayName: true, username: true } });
     if (!target || !target.companyId) { response.status(404).json({ code: 'admin_not_found' }); return; }
     if (target.role === 'platform_admin') { response.status(409).json({ code: 'cannot_remove_platform_admin' }); return; }
+    if (target.username === juryDemoUsername) { response.status(409).json({ code: 'demo_account' }); return; }
     const actor = miniApp(response).admin!;
     await prisma.$transaction((tx) => revokeAdminAccess(tx, target));
     await writeAdminAudit(prisma, actor.id, 'company_admin_removed', 'admin', target.id, { companyId: target.companyId });

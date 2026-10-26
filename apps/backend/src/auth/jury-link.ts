@@ -12,6 +12,10 @@ import { writeAdminAudit } from './admin-audit.js';
 
 export type JuryRole = 'uk' | 'admin';
 
+// The demo employee whose company the jury link opens; it cannot be removed
+// from the team, or the link and the password sign-in of the jury would break.
+export const juryDemoUsername = 'jury-uk';
+
 export const juryLinksUntil = new Date('2026-11-05T23:59:59+03:00');
 
 const juryPattern = /^jury_(uk|admin)_([A-Za-z0-9_-]{12,100})$/;
@@ -53,7 +57,7 @@ export async function grantJuryRole(maxUserId: string, displayName: string | nul
       await writeAdminAudit(tx, admin.id, 'jury_link_used', 'admin', admin.id, { role });
       return { ok: true, role, companyName: null };
     }
-    const demo = await tx.admin.findUnique({ where: { username: 'jury-uk' }, select: { company: { select: { id: true, name: true } } } });
+    const demo = await tx.admin.findUnique({ where: { username: juryDemoUsername }, select: { company: { select: { id: true, name: true } } } });
     if (!demo?.company) return { ok: false, code: 'no_demo_company' };
     // A platform administrator already sees every company; a real employee
     // of another company is not moved away from it.

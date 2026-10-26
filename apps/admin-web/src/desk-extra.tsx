@@ -62,13 +62,19 @@ export function CompanyStats({ onNotice }: { onNotice: Notify }) {
 
 // ---------- team ----------
 
-type Member = { id: string; role: string; displayName: string | null; username: string; viaMax: boolean; createdAt: string };
+type Member = { id: string; role: string; displayName: string | null; username: string; viaMax: boolean; createdAt: string; isYou?: boolean; removable?: boolean };
 type Invite = { link: string | null; expiresAt: string };
 
 export function TeamManager({ isPlatform, onLeft, onNotice }: { isPlatform: boolean; onLeft: () => void; onNotice: Notify }) {
   const [items, setItems] = useState<Member[] | null>(null);
   const [invite, setInvite] = useState<Invite | null>(null);
-  useEffect(() => { void api<{ items: Member[] }>(app('/company/team')).then(({ items: value }) => setItems(value)).catch(() => setItems([])); }, []);
+  const load = () => api<{ items: Member[] }>(app('/company/team')).then(({ items: value }) => setItems(value)).catch(() => setItems([]));
+  useEffect(() => { void load(); }, []);
+  const remove = async (member: Member) => {
+    const name = member.displayName ?? member.username;
+    if (!window.confirm(`Убрать «${name}» из сотрудников УК? Доступ к пульту в MAX и здесь пропадёт сразу. Вернуть можно только новым приглашением.`)) return;
+    try { await api(app(`/company/team/${member.id}`), { method: 'DELETE' }); onNotice(`${name} больше не сотрудник УК.`); await load(); } catch { onNotice('Не удалось убрать сотрудника.', 'error'); }
+  };
   const create = async () => {
     try { setInvite(await api<Invite>(app('/company/invites'), { method: 'POST', body: JSON.stringify({ role: 'supervisor' }) })); } catch { onNotice('Не удалось создать приглашение.', 'error'); }
   };
@@ -81,8 +87,9 @@ export function TeamManager({ isPlatform, onLeft, onNotice }: { isPlatform: bool
       <div className="panel-actions"><button className="primary" type="button" onClick={() => void create()}>Пригласить сотрудника</button></div></div>
     {invite ? <div className="invite-box connect-actions">{invite.link ? <><p className="form-hint">Одноразовая ссылка, действует до {formatFullDate(invite.expiresAt)}. Отправьте её сотруднику — он откроет её в MAX.</p><div className="secret-row"><input readOnly value={invite.link} onFocus={(event) => event.target.select()} /><button className="primary" type="button" onClick={() => void navigator.clipboard.writeText(invite.link!).then(() => onNotice('Ссылка скопирована.'))}>Скопировать</button></div></> : <p className="form-error">Ссылка не собралась: у бота не задано имя.</p>}</div> : null}
     {items === null ? <p className="state-message">Загружаем…</p> : items.length ? <div className="table-scroll"><table className="data-table">
-      <thead><tr><th>Сотрудник</th><th>Вход</th><th>С какого времени</th></tr></thead>
-      <tbody>{items.map((member) => <tr key={member.id}><td><strong>{member.displayName ?? member.username}</strong></td><td>{member.viaMax ? 'через MAX' : 'по паролю'}</td><td>{formatDay(member.createdAt)}</td></tr>)}</tbody>
+      <thead><tr><th>Сотрудник</th><th>Вход</th><th>С какого времени</th><th /></tr></thead>
+      <tbody>{items.map((member) => <tr key={member.id}><td><strong>{member.displayName ?? member.username}</strong>{member.isYou ? <span className="form-hint"> — это вы</span> : null}</td><td>{member.viaMax ? 'через MAX' : 'по паролю'}</td><td>{formatDay(member.createdAt)}</td>
+        <td className="row-actions">{member.removable ? <button className="filter danger" type="button" onClick={() => void remove(member)}>Убрать</button> : null}</td></tr>)}</tbody>
     </table></div> : <p className="state-message">Сотрудников пока нет.</p>}
     {isPlatform ? null : <div className="connect-actions"><button className="filter danger" type="button" onClick={() => void leave()}>Выйти из сотрудников УК</button></div>}
   </section>;

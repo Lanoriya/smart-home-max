@@ -14,6 +14,7 @@ import { miniApp, requireMiniAppAdmin } from './auth.js';
 import { createInvite } from './invites.js';
 import { createWebLoginLink } from '../auth/web-link.js';
 import { revokeAdminAccess } from '../auth/revoke-admin.js';
+import { juryDemoUsername } from '../auth/jury-link.js';
 import { buildingCodePattern } from '../buildings/access-code.js';
 import { hashInviteCode } from '../users/invite-code.js';
 import { env } from '../config/env.js';
@@ -283,12 +284,32 @@ companyRouter.put('/company', requireMiniAppAdmin('supervisor'), async (request,
 
 companyRouter.get('/team', requireMiniAppAdmin('supervisor'), async (_request, response, next) => {
   try {
+    const me = admin(response).id;
     const items = await prisma.admin.findMany({
       where: { companyId: companyOf(response) },
       orderBy: { createdAt: 'asc' },
       select: { id: true, role: true, displayName: true, username: true, maxUserId: true, createdAt: true },
     });
-    response.json({ items: items.map(({ maxUserId, ...item }) => ({ ...item, viaMax: Boolean(maxUserId) })) });
+    response.json({ items: items.map(({ maxUserId, ...item }) => ({ ...item, viaMax: Boolean(maxUserId), isYou: item.id === me, removable: item.id !== me && item.username !== juryDemoUsername })) });
+  } catch (error) { next(error); }
+});
+
+// A supervisor removes an employee of their company: the access ends at once,
+// the record stays for the history of incidents (see revokeAdminAccess).
+// Leaving oneself goes through POST /leave.
+companyRouter.delete('/team/:id', requireMiniAppAdmin('supervisor'), async (request, response, next) => {
+  try {
+    if (!z.string().uuid().safeParse(request.params.id).success) { response.status(404).json({ code: 'admin_not_found' }); return; }
+    const actor = admin(response);
+    const companyId = companyOf(response);
+    const target = await prisma.admin.findFirst({ where: { id: String(request.params.id), companyId }, select: { id: true, role: true, displayName: true, username: true } });
+    if (!target) { response.status(404).json({ code: 'admin_not_found' }); return; }
+    if (target.id === actor.id) { response.status(409).json({ code: 'cannot_remove_yourself' }); return; }
+    if (target.role === 'platform_admin') { response.status(409).json({ code: 'cannot_remove_platform_admin' }); return; }
+    if (target.username === juryDemoUsername) { response.status(409).json({ code: 'demo_account' }); return; }
+    await prisma.$transaction((tx) => revokeAdminAccess(tx, target));
+    await writeAdminAudit(prisma, actor.id, 'company_admin_removed', 'admin', target.id, { companyId });
+    response.status(204).end();
   } catch (error) { next(error); }
 });
 
